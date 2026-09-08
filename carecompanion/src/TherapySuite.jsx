@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { saveTelemetryLocal } from './db';
 import { 
   ArrowLeft, Volume2, HelpCircle, MessageSquare, Leaf, Puzzle, 
   MessageCircle, Palette, Medal, Layout, Play, Rabbit, Music, 
@@ -365,9 +366,9 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
   // UPDATE this function to save to the local database:
   const processTelemetry = async (gameName, latency, errors, completionSec) => {
     console.log(`📡 Sending [${gameName}] Telemetry to AI...`);
-    
+    await saveTelemetryLocal(gameName, latency, errors, completionSec);
     // 1. SAVE TO LOCAL DATABASE
-    saveGameResult(gameName, latency, errors, completionSec);
+    
 
     try {
       const response = await fetch('http://localhost:8000/api/evaluate', {

@@ -12,7 +12,7 @@ app = FastAPI()
 # We must explicitly list the local React development ports.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"], 
+    allow_origins=["*"],, 
     allow_credentials=True,
     allow_methods=["*"], # Allows all HTTP methods (GET, POST, etc.)
     allow_headers=["*"], # Allows all HTTP headers
