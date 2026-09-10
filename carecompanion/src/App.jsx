@@ -65,6 +65,59 @@ export default function App() {
     }, 10000);
     return () => clearInterval(checkAlarms);
   }, [routines, activeAlarm, currentUser]);
+  const currentUserRef = React.useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  // --- 5. BACKGROUND AWS SYNC ENGINE (STORE & FORWARD) ---
+  useEffect(() => {
+    const syncDataToAWS = async () => {
+      // 1. If the device has no Wi-Fi, don't even try.
+      if (!navigator.onLine) return;
+
+      try {
+        // 2. Scoop up all local records that haven't been synced yet
+        const unsyncedLogs = await db.telemetry_logs.where({ sync_status: 0 }).toArray();
+        if (unsyncedLogs.length === 0) return; // Nothing to sync!
+
+        const currentEmail = currentUserRef.current?.email || 'unknown';
+        const logsWithEmail = unsyncedLogs.map(log => ({
+           ...log,
+           patient_email: (log.patient_email && log.patient_email !== 'unknown') ? log.patient_email : currentEmail
+        }));
+
+        // 3. Send the batch to the FastAPI Cloud Receiver
+        const response = await fetch('http://localhost:8000/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ logs: logsWithEmail })
+        });
+
+        if (response.ok) {
+          // 4. Success! Mark all of these records as synced in the local database
+          await Promise.all(
+            unsyncedLogs.map(log => db.telemetry_logs.update(log.id, { sync_status: 1 }))
+          );
+          console.log(`☁️ Synced ${unsyncedLogs.length} records to AWS.`);
+        }
+      } catch (err) {
+        // 5. If the server is down, fail silently. It will just try again later.
+        console.warn("Backend unreachable. Keeping data in local offline storage.");
+      }
+    };
+
+    // Run the sync engine every 5 seconds in the background
+    const syncInterval = setInterval(syncDataToAWS, 5000);
+    
+    // Instantly try to sync the exact second the Wi-Fi turns back on
+    window.addEventListener('online', syncDataToAWS);
+
+    return () => {
+      clearInterval(syncInterval);
+      window.removeEventListener('online', syncDataToAWS);
+    };
+  }, []);
 
   // --- 4. UPDATE DATABASE DIRECTLY WHEN TASK IS DONE ---
   const quickDismissTask = async (taskId) => {
@@ -83,7 +136,7 @@ export default function App() {
   }
 
   const renderPatientView = () => {
-    if (currentScreen === 'therapy') return <TherapySuite onNavigate={setCurrentScreen} currentScreen={currentScreen} />;
+    if (currentScreen === 'therapy') return <TherapySuite onNavigate={setCurrentScreen} currentScreen={currentScreen} currentUser={currentUser} />;
     if (currentScreen === 'tasks') return <TaskDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} routines={routines} />;
     if (currentScreen === 'doctor') return <DoctorCare onNavigate={setCurrentScreen} currentScreen={currentScreen} />;
     
@@ -101,8 +154,6 @@ export default function App() {
       {currentUser.role === 'patient' ? renderPatientView() : (
         <DoctorPortal 
           doctorInfo={currentUser}
-          routines={routines} 
-          gameHistory={gameHistory} 
           prescribedGame={prescribedGame} 
           setPrescribedGame={setPrescribedGame} 
         />

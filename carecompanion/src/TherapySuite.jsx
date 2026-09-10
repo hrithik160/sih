@@ -358,15 +358,14 @@ const BirdGame = ({ onBack, level, processTelemetry }) => {
 // ==========================================
 // MASTER DASHBOARD & AI ROUTER
 // ==========================================
-// UPDATE your TherapySuite definition to accept the new prop:
-export default function TherapySuite({ onNavigate, currentScreen, saveGameResult }) {
+export default function TherapySuite({ onNavigate, currentScreen, saveGameResult, currentUser }) {
   const [activeGame, setActiveGame] = useState(null); 
-  const [globalAiLevel, setGlobalAiLevel] = useState(2); 
+  const [globalAiLevel, setGlobalAiLevel] = useState(currentUser?.dementia_level || 2);
 
   // UPDATE this function to save to the local database:
   const processTelemetry = async (gameName, latency, errors, completionSec) => {
     console.log(`📡 Sending [${gameName}] Telemetry to AI...`);
-    await saveTelemetryLocal(gameName, latency, errors, completionSec);
+    await saveTelemetryLocal(gameName, latency, errors, completionSec, currentUser?.email);
     // 1. SAVE TO LOCAL DATABASE
     
 
