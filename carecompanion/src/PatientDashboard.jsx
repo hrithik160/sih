@@ -55,9 +55,10 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
 
     const stats = {};
     gameHistory.forEach(g => {
-      if (!stats[g.gameId]) stats[g.gameId] = { errors: 0, count: 0 };
-      stats[g.gameId].errors += g.errors;
-      stats[g.gameId].count += 1;
+      const gId = g.game_id || 'MemoryMatch';
+      if (!stats[gId]) stats[gId] = { errors: 0, count: 0 };
+      stats[gId].errors += (g.error_count || 0);
+      stats[gId].count += 1;
     });
 
     let worstGame = pool[0];
