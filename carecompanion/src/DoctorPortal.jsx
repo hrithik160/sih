@@ -12,7 +12,7 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   React.useEffect(() => {
-    fetch(`http://localhost:8000/api/doctor/patients/${doctorInfo.email}`)
+    fetch(`http://127.0.0.1:8008/api/doctor/patients/${doctorInfo.email}`)
       .then(res => res.json())
       .then(data => {
          setPatients(data.patients || []);
@@ -25,8 +25,8 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
     if (!selectedPatientId) return;
     setIsRefreshing(true);
     Promise.all([
-      fetch(`http://localhost:8000/api/patients/${selectedPatientId}/routines`).then(res => res.json()),
-      fetch(`http://localhost:8000/api/patients/${selectedPatientId}/telemetry`).then(res => res.json())
+      fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/routines`).then(res => res.json()),
+      fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/telemetry`).then(res => res.json())
     ]).then(([routineData, telemetryData]) => {
       setRoutines(routineData.routines || []);
       setGameHistory(telemetryData.logs || []);
@@ -101,12 +101,12 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
     };
 
     try {
-      await fetch('http://localhost:8000/api/routines', {
+      await fetch('http://127.0.0.1:8008/api/routines', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const res = await fetch(`http://localhost:8000/api/patients/${selectedPatientId}/routines`);
+      const res = await fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/routines`);
       const data = await res.json();
       setRoutines(data.routines || []);
       setNewTask({ title: '', detail: '', time: '09:00', type: 'medication' });
@@ -117,8 +117,8 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
 
   const handleRemoveTask = async (taskId) => {
     try {
-      await fetch(`http://localhost:8000/api/routines/${taskId}`, { method: 'DELETE' });
-      const res = await fetch(`http://localhost:8000/api/patients/${selectedPatientId}/routines`);
+      await fetch(`http://127.0.0.1:8008/api/routines/${taskId}`, { method: 'DELETE' });
+      const res = await fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/routines`);
       const data = await res.json();
       setRoutines(data.routines || []);
     } catch (err) {

@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Stethoscope, User, HeartPulse, 
   Lock, ArrowRight, BrainCircuit, Clock
 } from 'lucide-react';
 import { db } from './db';
-import { auth, db as firebaseDb } from './firebase';
+import { auth } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const BaselineGame = ({ onComplete }) => {
   const [cards, setCards] = useState([
@@ -102,9 +101,16 @@ export default function LoginGateway({ onLogin }) {
       setError('');
       setIsGoogleSignIn(false);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getDoc(doc(firebaseDb, 'users', userCredential.user.uid));
-      if (userDoc.exists()) {
-        onLogin({ email, ...userDoc.data() });
+      
+      const res = await fetch('http://127.0.0.1:8008/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userCredential.user.email })
+      });
+      const data = await res.json();
+      
+      if (data.exists) {
+        onLogin({ email: userCredential.user.email, role: data.role, ...data.data });
       } else {
         setStep('choose_role');
       }
@@ -119,18 +125,29 @@ export default function LoginGateway({ onLogin }) {
       setError('');
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
+      console.log("Sign-in completed:", result.user.email);
       
-      const userDoc = await getDoc(doc(firebaseDb, 'users', result.user.uid));
-      if (userDoc.exists()) {
-        onLogin({ email: result.user.email, ...userDoc.data() });
-      } else {
+      const res = await fetch('http://127.0.0.1:8008/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: result.user.email })
+      });
+      const data = await res.json();
+      
+      if (!data.exists) {
+        console.log("User is new. Setting step to choose_role.");
         setIsGoogleSignIn(true);
         setEmail(result.user.email || '');
         setStep('choose_role');
+      } else {
+        console.log("User already exists in local DB! Logging in...");
+        onLogin({ email: result.user.email, role: data.role, ...data.data });
       }
     } catch (err) {
-      console.error(err);
-      setError(err.message || "Failed to sign in with Google.");
+      if (err.code !== 'auth/popup-closed-by-user') {
+        console.error("Login failed:", err);
+        setError(err.message || "Failed to sign in with Google.");
+      }
     }
   };
 
@@ -146,25 +163,39 @@ export default function LoginGateway({ onLogin }) {
   const submitPatientRegister = async () => {
     try {
       setError('');
-      let uid;
-      if (isGoogleSignIn && auth.currentUser && auth.currentUser.email === email) {
-        uid = auth.currentUser.uid;
-      } else {
+      if (!isGoogleSignIn) {
         try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          uid = userCredential.user.uid;
+          await createUserWithEmailAndPassword(auth, email, password);
         } catch (authErr) {
           if (authErr.code === 'auth/email-already-in-use') {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            uid = userCredential.user.uid;
+            await signInWithEmailAndPassword(auth, email, password);
           } else {
             throw authErr;
           }
         }
       }
 
-      const userData = { role: 'patient', email, ...patientData };
-      await setDoc(doc(firebaseDb, 'users', uid), userData);
+      const payload = {
+        email,
+        name: patientData.name,
+        caregiver: patientData.caregiver,
+        doctor_email: patientData.doctor_email,
+        emergencyPhone: patientData.emergencyPhone,
+        dementia_level: patientData.dementia_level,
+        stage: patientData.stage
+      };
+
+      const res = await fetch('http://127.0.0.1:8008/api/register/patient', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (!data.success) {
+        setError(data.message || "Registration failed on backend.");
+        return;
+      }
 
       const routinesToCreate = [
         { title: 'Wake Up & Water', detail: '1 Large Glass of water', category: 'HEALTH ☀️', time: scheduleData.wakeTime, reqPhoto: 0 },
@@ -189,9 +220,9 @@ export default function LoginGateway({ onLogin }) {
           ai_audit_status: r.reqPhoto ? 'pending' : 'none'
         });
 
-        // We can keep the API call if the backend is still used for other things
+        // Sync routine to backend
         try {
-          await fetch('http://localhost:8000/api/routines', {
+          await fetch('http://127.0.0.1:8008/api/routines', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -222,25 +253,37 @@ export default function LoginGateway({ onLogin }) {
   const submitDoctorRegister = async () => {
     try {
       setError('');
-      let uid;
-      if (isGoogleSignIn && auth.currentUser && auth.currentUser.email === email) {
-        uid = auth.currentUser.uid;
-      } else {
+      if (!isGoogleSignIn) {
         try {
-          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          uid = userCredential.user.uid;
+          await createUserWithEmailAndPassword(auth, email, password);
         } catch (authErr) {
           if (authErr.code === 'auth/email-already-in-use') {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            uid = userCredential.user.uid;
+            await signInWithEmailAndPassword(auth, email, password);
           } else {
             throw authErr;
           }
         }
       }
       
-      const userData = { role: 'doctor', email, ...doctorData };
-      await setDoc(doc(firebaseDb, 'users', uid), userData);
+      const payload = {
+        email,
+        name: doctorData.name,
+        specialty: doctorData.specialty,
+        hospital: doctorData.hospital,
+        certificate: doctorData.certificate
+      };
+      
+      const res = await fetch('http://127.0.0.1:8008/api/register/doctor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      
+      if (!data.success) {
+        setError(data.message || "Registration failed on backend.");
+        return;
+      }
       
       onLogin({ role: 'doctor', email, ...doctorData });
     } catch (err) {

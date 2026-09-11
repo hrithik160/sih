@@ -13,8 +13,22 @@ const GAME_UI = {
   TrayGame: { title: "Remember the Tray", detail: "Memorize the hidden objects", icon: Brain, color: "bg-amber-50 text-amber-600 border-amber-200", tip: "Strengthens short-term working memory." }
 };
 
-export default function PatientDashboard({ onNavigate, currentScreen, gameHistory = [] }) {
+export default function PatientDashboard({ onNavigate, currentScreen, gameHistory = [], prescribedGame }) {
   const [dayPhase, setDayPhase] = useState('morning');
+  
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const [currentTimeStr, setCurrentTimeStr] = useState('');
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [showSosModal, setShowSosModal] = useState(false);
@@ -151,7 +165,9 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
             <div>
               <div className="flex items-center space-x-1.5">
                 <h1 className="font-bold text-lg text-slate-800 tracking-tight">CareCompanion</h1>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">● Offline</span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  ● {isOnline ? 'Online' : 'Offline'}
+                </span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium">🔒 SQLCipher Synced</p>
             </div>

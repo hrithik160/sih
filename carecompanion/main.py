@@ -12,8 +12,8 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "*"], 
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -338,4 +338,4 @@ def delete_routine(task_id: str):
     return {"success": True}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8008)

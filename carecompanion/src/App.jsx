@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { liveQuery } from 'dexie'; // <-- Using Dexie's native query instead
 import { db, seedInitialData } from './db';
 import { auth } from './firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import LoginGateway from './LoginGateway';
 import PatientDashboard from './PatientDashboard';
 import TherapySuite from './TherapySuite';
@@ -20,6 +20,37 @@ export default function App() {
   // --- NEW: Bulletproof state for local DB ---
   const [gameHistory, setGameHistory] = useState([]);
   const [routines, setRoutines] = useState([]);
+
+  useEffect(() => {
+    console.log("App.jsx: onAuthStateChanged listener attached.");
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("App.jsx: onAuthStateChanged fired. User:", user ? user.email : null);
+      if (user) {
+        console.log("App.jsx: Fetching user data from local backend for", user.email);
+        try {
+          const res = await fetch('http://127.0.0.1:8008/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email })
+          });
+          const data = await res.json();
+          console.log("App.jsx: Does user exist in local db?", data.exists);
+          if (data.exists) {
+            console.log("App.jsx: User exists in local DB, setting currentUser state.");
+            setCurrentUser({ email: user.email, role: data.role, ...data.data });
+          } else {
+            console.log("App.jsx: User does NOT exist in local DB. Waiting for LoginGateway to handle registration.");
+          }
+        } catch (err) {
+          console.error("App.jsx: Failed to connect to local backend", err);
+        }
+      } else {
+        console.log("App.jsx: No user, setting currentUser to null.");
+        setCurrentUser(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // --- 1. INITIALIZE DATABASE ---
   useEffect(() => {
@@ -89,7 +120,7 @@ export default function App() {
         }));
 
         // 3. Send the batch to the FastAPI Cloud Receiver
-        const response = await fetch('http://localhost:8000/api/sync', {
+        const response = await fetch('http://127.0.0.1:8008/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ logs: logsWithEmail })
