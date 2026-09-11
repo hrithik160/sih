@@ -164,7 +164,7 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <h1 className="font-bold text-lg text-slate-800 tracking-tight">CareCompanion</h1>
+                <h1 className="font-bold text-lg text-slate-800 tracking-tight">AASTA</h1>
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${isOnline ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                   ● {isOnline ? 'Online' : 'Offline'}
                 </span>

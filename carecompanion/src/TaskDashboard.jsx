@@ -79,7 +79,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
               </div>
               <div>
                 <div className="flex items-center space-x-1.5">
-                  <h1 className="font-bold text-base text-[#0A5C4A] tracking-tight">CareCompanion</h1>
+                  <h1 className="font-bold text-base text-[#0A5C4A] tracking-tight">AASTA</h1>
                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase">
                     <Power className="w-3 h-3 mr-0.5" /> Offline
                   </span>
