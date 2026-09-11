@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { liveQuery } from 'dexie'; // <-- Using Dexie's native query instead
 import { db, seedInitialData } from './db';
-
+import { auth } from './firebase';
+import { signOut } from 'firebase/auth';
 import LoginGateway from './LoginGateway';
 import PatientDashboard from './PatientDashboard';
 import TherapySuite from './TherapySuite';
@@ -125,7 +126,12 @@ export default function App() {
     setActiveAlarm(null);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error(err);
+    }
     setCurrentUser(null);
     setCurrentScreen('daily_fun');
     setActiveAlarm(null);

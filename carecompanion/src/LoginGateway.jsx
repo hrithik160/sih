@@ -4,6 +4,9 @@ import {
   Lock, ArrowRight, BrainCircuit, Clock
 } from 'lucide-react';
 import { db } from './db';
+import { auth, db as firebaseDb } from './firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const BaselineGame = ({ onComplete }) => {
   const [cards, setCards] = useState([
@@ -78,7 +81,9 @@ const BaselineGame = ({ onComplete }) => {
 export default function LoginGateway({ onLogin }) {
   const [step, setStep] = useState('login');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isGoogleSignIn, setIsGoogleSignIn] = useState(false);
   
   const [patientData, setPatientData] = useState({
     name: '', caregiver: '', emergencyPhone: '', dementia_level: 1, stage: 'Mild', doctor_email: ''
@@ -94,20 +99,38 @@ export default function LoginGateway({ onLogin }) {
 
   const handleLogin = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (data.exists) {
-        onLogin(data.data);
+      setError('');
+      setIsGoogleSignIn(false);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userDoc = await getDoc(doc(firebaseDb, 'users', userCredential.user.uid));
+      if (userDoc.exists()) {
+        onLogin({ email, ...userDoc.data() });
       } else {
         setStep('choose_role');
       }
     } catch (err) {
       console.error(err);
-      setError("Failed to connect to server");
+      setError(err.message || "Failed to login. If you don't have an account, please click Register.");
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setError('');
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      
+      const userDoc = await getDoc(doc(firebaseDb, 'users', result.user.uid));
+      if (userDoc.exists()) {
+        onLogin({ email: result.user.email, ...userDoc.data() });
+      } else {
+        setIsGoogleSignIn(true);
+        setEmail(result.user.email || '');
+        setStep('choose_role');
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to sign in with Google.");
     }
   };
 
@@ -122,36 +145,52 @@ export default function LoginGateway({ onLogin }) {
 
   const submitPatientRegister = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/register/patient', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ email, ...patientData })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const routinesToCreate = [
-          { title: 'Wake Up & Water', detail: '1 Large Glass of water', category: 'HEALTH ☀️', time: scheduleData.wakeTime, reqPhoto: 0 },
-          { title: 'Breakfast & Meds', detail: 'Morning routine', category: 'MEAL 🍲', time: scheduleData.breakfastTime, reqPhoto: 1 },
-          { title: 'Lunch', detail: 'Afternoon meal', category: 'MEAL 🍲', time: scheduleData.lunchTime, reqPhoto: 0 },
-          { title: 'Dinner', detail: 'Evening meal', category: 'MEAL 🍲', time: scheduleData.dinnerTime, reqPhoto: 0 },
-          { title: 'Sleep Preparation', detail: 'Wind down', category: 'HEALTH 🌙', time: scheduleData.sleepTime, reqPhoto: 0 }
-        ];
+      setError('');
+      let uid;
+      if (isGoogleSignIn && auth.currentUser && auth.currentUser.email === email) {
+        uid = auth.currentUser.uid;
+      } else {
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          uid = userCredential.user.uid;
+        } catch (authErr) {
+          if (authErr.code === 'auth/email-already-in-use') {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            uid = userCredential.user.uid;
+          } else {
+            throw authErr;
+          }
+        }
+      }
 
-        const localRoutinesToSave = [];
+      const userData = { role: 'patient', email, ...patientData };
+      await setDoc(doc(firebaseDb, 'users', uid), userData);
 
-        for (const r of routinesToCreate) {
-          const task_id = 'task_' + Math.random().toString(36).substr(2, 9);
-          localRoutinesToSave.push({
-            task_id,
-            title: r.title,
-            detail: r.detail,
-            category: r.category,
-            scheduled_time: r.time,
-            is_completed: 0,
-            requires_photo: r.reqPhoto,
-            ai_audit_status: r.reqPhoto ? 'pending' : 'none'
-          });
+      const routinesToCreate = [
+        { title: 'Wake Up & Water', detail: '1 Large Glass of water', category: 'HEALTH ☀️', time: scheduleData.wakeTime, reqPhoto: 0 },
+        { title: 'Breakfast & Meds', detail: 'Morning routine', category: 'MEAL 🍲', time: scheduleData.breakfastTime, reqPhoto: 1 },
+        { title: 'Lunch', detail: 'Afternoon meal', category: 'MEAL 🍲', time: scheduleData.lunchTime, reqPhoto: 0 },
+        { title: 'Dinner', detail: 'Evening meal', category: 'MEAL 🍲', time: scheduleData.dinnerTime, reqPhoto: 0 },
+        { title: 'Sleep Preparation', detail: 'Wind down', category: 'HEALTH 🌙', time: scheduleData.sleepTime, reqPhoto: 0 }
+      ];
 
+      const localRoutinesToSave = [];
+
+      for (const r of routinesToCreate) {
+        const task_id = 'task_' + Math.random().toString(36).substr(2, 9);
+        localRoutinesToSave.push({
+          task_id,
+          title: r.title,
+          detail: r.detail,
+          category: r.category,
+          scheduled_time: r.time,
+          is_completed: 0,
+          requires_photo: r.reqPhoto,
+          ai_audit_status: r.reqPhoto ? 'pending' : 'none'
+        });
+
+        // We can keep the API call if the backend is still used for other things
+        try {
           await fetch('http://localhost:8000/api/routines', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -166,36 +205,47 @@ export default function LoginGateway({ onLogin }) {
               ai_audit_status: r.reqPhoto ? 'pending' : 'none'
             })
           });
+        } catch (fetchErr) {
+          console.warn("Could not sync routine to backend, but saved locally.", fetchErr);
         }
-
-        await db.schedule_and_audit.bulkAdd(localRoutinesToSave);
-
-        onLogin({ role: 'patient', email, ...patientData });
-      } else {
-        const errorMsg = data.message || (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) || "Failed to register patient";
-        setError(errorMsg);
       }
+
+      await db.schedule_and_audit.bulkAdd(localRoutinesToSave);
+      onLogin({ role: 'patient', email, ...patientData });
+
     } catch (err) {
-      setError("Registration error: Cannot connect to server. Is backend running?");
+      console.error(err);
+      setError(err.message || "Registration error: Failed to create patient account.");
     }
   };
 
   const submitDoctorRegister = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/register/doctor', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ email, ...doctorData })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        onLogin({ role: 'doctor', email, ...doctorData });
+      setError('');
+      let uid;
+      if (isGoogleSignIn && auth.currentUser && auth.currentUser.email === email) {
+        uid = auth.currentUser.uid;
       } else {
-        const errorMsg = data.message || (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)) || "Failed to register doctor";
-        setError(errorMsg);
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          uid = userCredential.user.uid;
+        } catch (authErr) {
+          if (authErr.code === 'auth/email-already-in-use') {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            uid = userCredential.user.uid;
+          } else {
+            throw authErr;
+          }
+        }
       }
+      
+      const userData = { role: 'doctor', email, ...doctorData };
+      await setDoc(doc(firebaseDb, 'users', uid), userData);
+      
+      onLogin({ role: 'doctor', email, ...doctorData });
     } catch (err) {
-      setError("Registration error: Cannot connect to server. Is backend running?");
+      console.error(err);
+      setError(err.message || "Registration error: Failed to create doctor account.");
     }
   };
 
@@ -217,15 +267,37 @@ export default function LoginGateway({ onLogin }) {
 
         {step === 'login' && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold mb-4">Login</h2>
+            <h2 className="text-xl font-bold mb-4">Login or Register</h2>
             <input 
               type="email" placeholder="Enter your email" 
               className="w-full p-3 rounded bg-slate-900 border border-slate-700 text-white"
               value={email} onChange={e => setEmail(e.target.value)}
             />
-            <button onClick={handleLogin} className="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold">
-              Continue <ArrowRight className="inline w-4 h-4" />
-            </button>
+            <input 
+              type="password" placeholder="Enter your password" 
+              className="w-full p-3 rounded bg-slate-900 border border-slate-700 text-white"
+              value={password} onChange={e => setPassword(e.target.value)}
+            />
+            <div className="flex gap-4">
+              <button onClick={handleLogin} className="w-1/2 bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold">
+                Login <ArrowRight className="inline w-4 h-4 ml-1" />
+              </button>
+              <button onClick={() => {
+                setError('');
+                if(!email || !password) {
+                  setError("Please enter email and password to register");
+                  return;
+                }
+                setStep('choose_role');
+              }} className="w-1/2 bg-slate-600 hover:bg-slate-500 py-3 rounded font-bold">
+                Register
+              </button>
+            </div>
+            <div className="mt-4">
+              <button onClick={handleGoogleSignIn} className="w-full bg-red-600 hover:bg-red-500 py-3 rounded font-bold flex items-center justify-center gap-2">
+                Sign in with Google
+              </button>
+            </div>
           </div>
         )}
 
