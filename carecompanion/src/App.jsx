@@ -177,7 +177,7 @@ export default function App() {
     if (currentScreen === 'tasks') return <TaskDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} routines={routines} />;
     if (currentScreen === 'doctor') return <DoctorCare onNavigate={setCurrentScreen} currentScreen={currentScreen} />;
     
-    return <PatientDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} gameHistory={gameHistory} prescribedGame={prescribedGame} />;
+    return <PatientDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} gameHistory={gameHistory} prescribedGame={prescribedGame} routines={routines} />;
   };
 
   return (

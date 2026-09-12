@@ -5,8 +5,9 @@ import {
   User, Plus, Trash2, Shield, Smile, Puzzle, 
   ClipboardCheck, Power, Hand
 } from 'lucide-react';
+import { db } from './db';
 
-export default function TaskDashboard({ onNavigate, currentScreen, routines = [], setRoutines = () => {} }) {
+export default function TaskDashboard({ onNavigate, currentScreen, routines = [] }) {
   const [activeTab, setActiveTab] = useState('alarm'); // alarm, routine, doctor
   const [cameraState, setCameraState] = useState('idle'); // idle, captured, verified
   
@@ -29,41 +30,46 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
 
   const handleTakePhoto = () => {
     setCameraState('captured');
-    setTimeout(() => setCameraState('verified'), 1000);
+    setTimeout(() => setCameraState('verified'), 1500);
+  };
+
+  const handleDismiss = () => {
+    // Mark the pending photo task as completed
+    const pendingPhotoTask = routines.find(r => r.requires_photo === 1 && r.is_completed === 0);
+    if (pendingPhotoTask) {
+      db.schedule_and_audit.update(pendingPhotoTask.task_id, { is_completed: 1 });
+    }
   };
 
   const handleSilenceAlarm = () => {
     alert("Camera audit saved to encrypted local storage!");
     setCameraState('idle');
     setActiveTab('routine');
-    
-    // Mark the pending photo task as completed
-    const pendingPhotoTask = routines.find(r => r.requiresPhoto && r.status === 'pending');
-    if (pendingPhotoTask) {
-      setRoutines(routines.map(r => r.id === pendingPhotoTask.id ? { ...r, status: 'done' } : r));
-    }
+    handleDismiss();
   };
 
-  const handleAddRoutine = (e) => {
+  const handleAddRoutine = async (e) => {
     e.preventDefault();
     if (!newTaskTitle || !newTaskTime) return;
     
-    const newTask = {
-      id: Date.now(),
+    await db.schedule_and_audit.add({
+      task_id: 'task_' + Date.now(),
       title: newTaskTitle,
-      time: newTaskTime,
-      status: 'pending',
-      requiresPhoto: newRequiresPhoto
-    };
-
-    setRoutines([...routines, newTask].sort((a, b) => a.time.localeCompare(b.time)));
+      detail: 'Added by caretaker',
+      category: 'ROUTINE 🗓️',
+      scheduled_time: newTaskTime,
+      is_completed: 0,
+      requires_photo: newRequiresPhoto ? 1 : 0,
+      ai_audit_status: 'none'
+    });
+    
     setNewTaskTitle('');
     setNewTaskTime('');
     setNewRequiresPhoto(false);
   };
 
-  const handleDeleteRoutine = (id) => {
-    setRoutines(routines.filter(r => r.id !== id));
+  const handleDeleteRoutine = async (id) => {
+    await db.schedule_and_audit.delete(id);
   };
 
   return (

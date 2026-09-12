@@ -4,8 +4,9 @@ import {
   ChevronLeft, ChevronRight, Sparkles, Camera, 
   Smile, Puzzle, ClipboardCheck, Stethoscope,
   Moon, Pill, Palette, Coffee, Sun, Droplets, Eye, Brain, Layout,
-  Music, Play, Pause 
+  Music, Play, Pause, Calendar 
 } from 'lucide-react';
+import { db } from './db';
 
 const GAME_UI = {
   MemoryMatch: { title: "Heritage Match", detail: "Match pairs of local birds", icon: Eye, color: "bg-emerald-50 text-emerald-600 border-emerald-200", tip: "Clinically exercises your visual recall!" },
@@ -13,7 +14,7 @@ const GAME_UI = {
   TrayGame: { title: "Remember the Tray", detail: "Memorize the hidden objects", icon: Brain, color: "bg-amber-50 text-amber-600 border-amber-200", tip: "Strengthens short-term working memory." }
 };
 
-export default function PatientDashboard({ onNavigate, currentScreen, gameHistory = [], prescribedGame }) {
+export default function PatientDashboard({ onNavigate, currentScreen, gameHistory = [], prescribedGame, routines = [] }) {
   const [dayPhase, setDayPhase] = useState('morning');
   
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -37,20 +38,28 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
   const audioRef = useRef(null);
 
-  const toggleMusic = () => {
-    // Initialize the audio object on the very first click
-    if (!audioRef.current) {
-      audioRef.current = new Audio('/calming-music.mp3'); // Points to the file in your public folder
-      audioRef.current.loop = true; // Loops the song continuously 
-    }
+  useEffect(() => {
+    // 1. Time ticking logic
+    const timer = setInterval(() => {
+      const now = new Date();
+      setCurrentTimeStr(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      const hour = now.getHours();
+      setDayPhase(hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening');
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
+  const toggleMusic = () => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio('/calming-music.mp3');
+      audioRef.current.loop = true;
+    }
     if (isPlayingMusic) {
       audioRef.current.pause();
-      setIsPlayingMusic(false);
     } else {
       audioRef.current.play().catch(err => console.error("Audio playback blocked:", err));
-      setIsPlayingMusic(true);
     }
+    setIsPlayingMusic(!isPlayingMusic);
   };
 
   // --- CLEANUP (Stops music if they switch tabs) ---
@@ -62,42 +71,9 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
     };
   }, []);
 
-  // --- AI RECOMMENDATION ENGINE ---
-  const getRecommendedGame = () => {
-    const pool = ['MemoryMatch', 'RoutineRecall', 'TrayGame'];
-    if (gameHistory.length === 0) return 'MemoryMatch';
-
-    const stats = {};
-    gameHistory.forEach(g => {
-      const gId = g.game_id || 'MemoryMatch';
-      if (!stats[gId]) stats[gId] = { errors: 0, count: 0 };
-      stats[gId].errors += (g.error_count || 0);
-      stats[gId].count += 1;
-    });
-
-    let worstGame = pool[0];
-    let maxErrorRate = -1;
-
-    pool.forEach(game => {
-      const gameStats = stats[game];
-      if (!gameStats) {
-        maxErrorRate = 999;
-        worstGame = game;
-      } else {
-        const rate = gameStats.errors / gameStats.count;
-        if (rate > maxErrorRate) {
-          maxErrorRate = rate;
-          worstGame = game;
-        }
-      }
-    });
-    return worstGame;
-  };
-
-  const recommendedGameId = getRecommendedGame();
-  const gameData = GAME_UI[recommendedGameId];
-
-  // --- AUTO-VERIFICATION ---
+  const gameData = GAME_UI[prescribedGame] || GAME_UI.MemoryMatch;
+  
+  // Check if they played any game today
   const todayStr = new Date().toDateString();
   const hasPlayedGameToday = gameHistory.some(g => 
     new Date(g.timestamp).toDateString() === todayStr && 
@@ -105,52 +81,69 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
   );
 
   // --- DYNAMIC TASK LIST ---
+  // Map routines from DB to UI TASKS format
+  const dbTasks = [...routines]
+    .sort((a, b) => (a.scheduled_time || "").localeCompare(b.scheduled_time || ""))
+    .map(r => ({
+    id: r.task_id, 
+    category: r.category, 
+    title: r.title, 
+    detail: r.detail,
+    tip: `Scheduled for ${r.scheduled_time}`, 
+    icon: r.category?.includes('MEDICATION') ? Pill : Calendar, 
+    color: r.category?.includes('MEDICATION') ? "bg-red-50 text-red-600 border-red-200" : "bg-cyan-50 text-cyan-600 border-cyan-200",
+    is_completed: r.is_completed === 1
+  }));
+
   const TASKS = [
-    {
-      id: 'physical_task', category: "HEALTH ☀️", title: "Drink Water & Walk", detail: "1 Large Glass + 5 mins gentle morning sun",
-      tip: "Keeps memory sharp and body hydrated!", icon: Droplets, color: "bg-cyan-50 text-cyan-600 border-cyan-200"
-    },
+    ...dbTasks,
     {
       id: 'cognitive_task', category: "AI RECOMMENDED 🧠", title: gameData.title, detail: gameData.detail,
-      tip: gameData.tip, icon: gameData.icon, color: gameData.color
+      tip: gameData.tip, icon: gameData.icon, color: gameData.color, is_completed: hasPlayedGameToday
     }
   ];
 
   const [manualCompletedTasks, setManualCompletedTasks] = useState([]);
+  
   const isTaskCompleted = (taskId) => {
-    if (taskId === 'cognitive_task') return hasPlayedGameToday;
+    const dbTask = TASKS.find(t => t.id === taskId);
+    if (dbTask?.id === 'cognitive_task') return hasPlayedGameToday;
+    if (dbTask && dbTask.is_completed !== undefined) return dbTask.is_completed;
     return manualCompletedTasks.includes(taskId);
   };
 
-  const handleTaskComplete = () => {
+  useEffect(() => {
+    if (TASKS.length > 0) {
+      const firstPending = TASKS.findIndex(t => !isTaskCompleted(t.id));
+      if (firstPending !== -1 && currentTaskIndex === 0) {
+        setCurrentTaskIndex(firstPending);
+      }
+    }
+  }, [routines.length]);
+
+  const handleTaskComplete = async () => {
     const currentTaskId = TASKS[currentTaskIndex].id;
     if (currentTaskId === 'cognitive_task' && !hasPlayedGameToday) {
       onNavigate('therapy');
       return;
     }
     
-    if (!manualCompletedTasks.includes(currentTaskId)) {
-      setManualCompletedTasks([...manualCompletedTasks, currentTaskId]);
+    // If it's a real routine from DB
+    if (currentTaskId !== 'cognitive_task') {
+      await db.schedule_and_audit.update(currentTaskId, { is_completed: 1 });
+    } else {
+      if (!manualCompletedTasks.includes(currentTaskId)) {
+        setManualCompletedTasks([...manualCompletedTasks, currentTaskId]);
+      }
     }
+
     if (currentTaskIndex < TASKS.length - 1) {
       setTimeout(() => setCurrentTaskIndex(currentTaskIndex + 1), 600);
     }
   };
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTimeStr(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      const hour = now.getHours();
-      setDayPhase(hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening');
-    };
-    updateTime();
-    const int = setInterval(updateTime, 60000);
-    return () => clearInterval(int);
-  }, []);
-
   const currentTask = TASKS[currentTaskIndex];
-  const isCurrentCompleted = isTaskCompleted(currentTask.id);
+  const isCurrentCompleted = currentTask ? isTaskCompleted(currentTask.id) : false;
 
   return (
     <div className="min-h-screen bg-[#F4F9F7] text-slate-800 flex justify-center items-start p-2 sm:p-4 select-none font-sans">

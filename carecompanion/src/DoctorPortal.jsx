@@ -132,7 +132,7 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
       {/* HEADER */}
       <div className="flex items-center justify-between mb-6 border-b border-slate-700 pb-4">
         <div>
-          <h1 className="text-3xl font-black text-blue-400">Clinical Console</h1>
+          <h1 className="text-3xl font-black text-blue-400">AASTA</h1>
           <p className="text-slate-400 text-sm mt-1">{doctorInfo?.name || "Dr. Ananya Sengupta"} • {doctorInfo?.specialty || "NER Dementia Unit"}</p>
         </div>
         <div className="flex items-center space-x-4">
