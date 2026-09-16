@@ -1,12 +1,37 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Smile, Puzzle, ClipboardCheck, Stethoscope, 
-  Video, FileText, HeartPulse
+  Video, FileText, HeartPulse, X, FileIcon, Loader
 } from 'lucide-react';
 
-export default function DoctorCare({ onNavigate, currentScreen }) {
+export default function DoctorCare({ onNavigate, currentScreen, currentUser }) {
+  const [showLabs, setShowLabs] = useState(false);
+  const [labReports, setLabReports] = useState([]);
+  const [isLoadingLabs, setIsLoadingLabs] = useState(false);
+
+  const fetchLabReports = async () => {
+    if (!currentUser) return;
+    setIsLoadingLabs(true);
+    setShowLabs(true);
+    try {
+      const { rtdb } = await import('./firebase');
+      const { ref, get } = await import('firebase/database');
+      const emailKey = currentUser.email.replace(/\./g, ',');
+      const snapshot = await get(ref(rtdb, `users/${emailKey}/lab_reports`));
+      
+      if (snapshot.exists()) {
+        setLabReports(Object.values(snapshot.val()));
+      } else {
+        setLabReports([]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setIsLoadingLabs(false);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8F9FB] text-slate-800 flex justify-center items-start p-2 sm:p-4 select-none font-sans">
+    <div className="min-h-screen bg-[#F8F9FB] text-slate-800 flex justify-center items-start p-2 sm:p-4 select-none font-sans relative">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col overflow-hidden relative min-h-[850px]">
         
         {/* HEADER */}
@@ -34,7 +59,7 @@ export default function DoctorCare({ onNavigate, currentScreen }) {
               <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded">Next: 3:00 PM</span>
             </button>
 
-            <button className="w-full bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm hover:border-emerald-300 transition-colors">
+            <button onClick={fetchLabReports} className="w-full bg-white border border-slate-200 p-4 rounded-2xl flex items-center justify-between shadow-sm hover:border-emerald-300 transition-colors">
               <div className="flex items-center space-x-3">
                 <div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><FileText className="w-5 h-5" /></div>
                 <span className="font-bold text-slate-700 text-sm">View Lab Reports</span>
@@ -42,6 +67,55 @@ export default function DoctorCare({ onNavigate, currentScreen }) {
             </button>
           </div>
         </div>
+
+        {/* LAB REPORTS MODAL */}
+        {showLabs && (
+          <div className="absolute inset-0 z-50 bg-white flex flex-col animate-in slide-in-from-bottom-full duration-300">
+            <div className="px-4 py-4 bg-amber-500 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-6 h-6" />
+                <h1 className="font-bold text-lg">My Lab Reports</h1>
+              </div>
+              <button onClick={() => setShowLabs(false)} className="bg-white/20 hover:bg-white/30 rounded-full p-2 transition-colors">
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+               {isLoadingLabs ? (
+                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                   <Loader className="w-8 h-8 animate-spin mb-4" />
+                   <p className="font-bold text-sm">Fetching Reports...</p>
+                 </div>
+               ) : labReports.length === 0 ? (
+                 <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                   <FileText className="w-12 h-12 mb-4 opacity-50" />
+                   <p className="font-bold">No lab reports found.</p>
+                 </div>
+               ) : (
+                 labReports.map((report) => (
+                   <a 
+                     key={report.id} 
+                     href={report.data} 
+                     download={report.name}
+                     className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-4 shadow-sm hover:border-amber-300 transition-colors cursor-pointer"
+                   >
+                     <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
+                        <FileIcon className="w-6 h-6 text-amber-600" />
+                     </div>
+                     <div className="flex-1 min-w-0">
+                       <h3 className="font-bold text-sm text-slate-800 truncate">{report.name}</h3>
+                       <p className="text-xs font-medium text-slate-500 mt-0.5">{new Date(report.date).toLocaleDateString()}</p>
+                     </div>
+                     <div className="px-3 py-1.5 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                       Download
+                     </div>
+                   </a>
+                 ))
+               )}
+            </div>
+          </div>
+        )}
 
         {/* BOTTOM NAVIGATION BAR */}
         <nav className="absolute bottom-0 w-full border-t border-slate-100 bg-white px-2 py-2 flex items-center justify-between z-10 rounded-b-3xl">

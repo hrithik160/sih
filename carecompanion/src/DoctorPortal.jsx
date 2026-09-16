@@ -1,40 +1,64 @@
 import React, { useState } from 'react';
-import { Pill, Trash2, PlusCircle, Activity, User, BrainCircuit, LineChart as ChartIcon, Cloud, ShieldAlert, Clock, AlertTriangle, Target, TrendingUp, RefreshCw } from 'lucide-react';
+import { Pill, Trash2, PlusCircle, Activity, User, BrainCircuit, LineChart as ChartIcon, Cloud, ShieldAlert, Clock, AlertTriangle, Target, TrendingUp, RefreshCw, FileText, UploadCloud, File as FileIcon } from 'lucide-react';
 
 export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribedGame }) {
   // --- STATE ---
   const [routines, setRoutines] = useState([]);
   const [gameHistory, setGameHistory] = useState([]);
+  const [labReports, setLabReports] = useState([]);
   const [activeTab, setActiveTab] = useState('prescriptions'); // Default to prescriptions for this demo
   const [newTask, setNewTask] = useState({ title: '', detail: '', time: '09:00', type: 'medication' });
   const [patients, setPatients] = useState([]);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   React.useEffect(() => {
-    fetch(`http://127.0.0.1:8008/api/doctor/patients/${doctorInfo.email}`)
-      .then(res => res.json())
-      .then(data => {
-         setPatients(data.patients || []);
-         if (data.patients?.length > 0 && !selectedPatientId) setSelectedPatientId(data.patients[0].email);
-      })
-      .catch(console.error);
+    const fetchPatients = async () => {
+      try {
+        const { rtdb } = await import('./firebase');
+        const { ref, get } = await import('firebase/database');
+        const snapshot = await get(ref(rtdb, 'users'));
+        if (snapshot.exists()) {
+           const allUsers = snapshot.val();
+           // Only show patients for this doctor
+           const patientList = Object.values(allUsers).filter(u => u.role === 'patient');
+           setPatients(patientList);
+           if (patientList.length > 0 && !selectedPatientId) setSelectedPatientId(patientList[0].email);
+        }
+      } catch (err) {
+        console.error("Could not fetch patients from Firebase", err);
+      }
+    };
+    fetchPatients();
   }, [doctorInfo.email]);
 
-  const loadPatientData = () => {
+  const loadPatientData = async () => {
     if (!selectedPatientId) return;
     setIsRefreshing(true);
-    Promise.all([
-      fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/routines`).then(res => res.json()),
-      fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/telemetry`).then(res => res.json())
-    ]).then(([routineData, telemetryData]) => {
-      setRoutines(routineData.routines || []);
-      setGameHistory(telemetryData.logs || []);
+    try {
+      const { rtdb } = await import('./firebase');
+      const { ref, get } = await import('firebase/database');
+      const emailKey = selectedPatientId.replace(/\./g, ',');
+      
+      const [rSnap, tSnap, lSnap] = await Promise.all([
+        get(ref(rtdb, `users/${emailKey}/routines`)),
+        get(ref(rtdb, `users/${emailKey}/telemetry`)),
+        get(ref(rtdb, `users/${emailKey}/lab_reports`))
+      ]);
+      
+      const routineData = rSnap.exists() ? Object.values(rSnap.val()) : [];
+      const telemetryData = tSnap.exists() ? Object.values(tSnap.val()) : [];
+      const labsData = lSnap.exists() ? Object.values(lSnap.val()) : [];
+      
+      setRoutines(routineData);
+      setGameHistory(telemetryData);
+      setLabReports(labsData);
       setTimeout(() => setIsRefreshing(false), 400);
-    }).catch(err => {
+    } catch (err) {
       console.error(err);
       setIsRefreshing(false);
-    });
+    }
   };
 
   React.useEffect(() => {
@@ -91,24 +115,24 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
 
     const payload = {
       task_id: taskId,
-      patient_email: selectedPatientId,
       title: newTask.title,
       detail: formattedDetail,
       category: categoryStr,
       scheduled_time: newTask.time,
       requires_photo: requiresPhoto, 
-      ai_audit_status: auditStatus
+      ai_audit_status: auditStatus,
+      is_completed: 0
     };
 
     try {
-      await fetch('http://127.0.0.1:8008/api/routines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const res = await fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/routines`);
-      const data = await res.json();
-      setRoutines(data.routines || []);
+      const { rtdb } = await import('./firebase');
+      const { ref, set, get } = await import('firebase/database');
+      const emailKey = selectedPatientId.replace(/\./g, ',');
+      
+      await set(ref(rtdb, `users/${emailKey}/routines/${taskId}`), payload);
+      
+      const res = await get(ref(rtdb, `users/${emailKey}/routines`));
+      setRoutines(res.exists() ? Object.values(res.val()) : []);
       setNewTask({ title: '', detail: '', time: '09:00', type: 'medication' });
     } catch (err) {
       console.error(err);
@@ -117,13 +141,54 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
 
   const handleRemoveTask = async (taskId) => {
     try {
-      await fetch(`http://127.0.0.1:8008/api/routines/${taskId}`, { method: 'DELETE' });
-      const res = await fetch(`http://127.0.0.1:8008/api/patients/${selectedPatientId}/routines`);
-      const data = await res.json();
-      setRoutines(data.routines || []);
+      const { rtdb } = await import('./firebase');
+      const { ref, remove, get } = await import('firebase/database');
+      const emailKey = selectedPatientId.replace(/\./g, ',');
+      
+      await remove(ref(rtdb, `users/${emailKey}/routines/${taskId}`));
+      const res = await get(ref(rtdb, `users/${emailKey}/routines`));
+      setRoutines(res.exists() ? Object.values(res.val()) : []);
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedPatientId) return;
+    
+    if (file.type !== 'application/pdf') {
+      alert('Only PDF files are supported.');
+      return;
+    }
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Str = event.target.result;
+      try {
+        const { rtdb } = await import('./firebase');
+        const { ref, set, get } = await import('firebase/database');
+        const emailKey = selectedPatientId.replace(/\./g, ',');
+        const reportId = 'lab_' + Date.now();
+        
+        const payload = {
+          id: reportId,
+          name: file.name,
+          date: new Date().toISOString(),
+          data: base64Str
+        };
+
+        await set(ref(rtdb, `users/${emailKey}/lab_reports/${reportId}`), payload);
+        const res = await get(ref(rtdb, `users/${emailKey}/lab_reports`));
+        setLabReports(res.exists() ? Object.values(res.val()) : []);
+        setIsUploading(false);
+      } catch (err) {
+        console.error(err);
+        setIsUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -177,6 +242,12 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
           className={`flex items-center px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'sos' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
         >
           <ShieldAlert className="w-4 h-4 mr-2" /> Audit & SOS
+        </button>
+        <button 
+          onClick={() => setActiveTab('lab')}
+          className={`flex items-center px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'lab' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+        >
+          <FileText className="w-4 h-4 mr-2" /> Lab Reports
         </button>
       </div>
 
@@ -428,6 +499,45 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
            <p className="text-slate-400 max-w-md mx-auto">
              This tab will display pill validation photos captured by the patient's camera, as well as offline SOS emergency triggers.
            </p>
+        </div>
+      )}
+
+      {/* TAB CONTENT: LAB REPORTS */}
+      {activeTab === 'lab' && (
+        <div className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-xl animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-[400px]">
+           <div className="flex justify-between items-center mb-6">
+             <h2 className="text-xl font-bold text-emerald-400 flex items-center"><FileText className="w-5 h-5 mr-2"/> Patient Lab Reports</h2>
+             <label className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 rounded-xl cursor-pointer shadow-lg transition-colors flex items-center">
+               <UploadCloud className={`w-4 h-4 mr-2 ${isUploading ? 'animate-bounce' : ''}`} />
+               {isUploading ? 'Uploading...' : 'Upload PDF'}
+               <input type="file" accept="application/pdf" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+             </label>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+             {labReports.length === 0 ? (
+               <div className="col-span-full py-12 text-center text-slate-500 font-bold border-2 border-dashed border-slate-700 rounded-2xl">
+                 No lab reports uploaded yet.
+               </div>
+             ) : (
+               labReports.map((report) => (
+                 <a 
+                   key={report.id} 
+                   href={report.data}
+                   download={report.name}
+                   className="bg-slate-900 border border-slate-700 p-4 rounded-2xl hover:border-emerald-500 transition-colors flex items-center gap-4 group cursor-pointer"
+                 >
+                   <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center group-hover:bg-emerald-900 transition-colors">
+                     <FileIcon className="w-6 h-6 text-emerald-500" />
+                   </div>
+                   <div className="flex-1 min-w-0">
+                     <p className="text-slate-200 font-bold text-sm truncate">{report.name}</p>
+                     <p className="text-slate-500 text-xs mt-1">{new Date(report.date).toLocaleDateString()}</p>
+                   </div>
+                 </a>
+               ))
+             )}
+           </div>
         </div>
       )}
 

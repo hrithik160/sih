@@ -79,6 +79,17 @@ def init_db():
     except sqlite3.OperationalError:
         pass # Column already exists
         
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sos_events (
+            event_id TEXT PRIMARY KEY,
+            patient_email TEXT,
+            patient_name TEXT,
+            emergency_phone TEXT,
+            location TEXT,
+            timestamp TEXT,
+            status TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -336,6 +347,50 @@ def delete_routine(task_id: str):
     conn.commit()
     conn.close()
     return {"success": True}
+
+# ----------------------------------------------------
+# SOS EMERGENCY ENDPOINTS
+# ----------------------------------------------------
+class SosPayload(BaseModel):
+    patient_email: str
+    patient_name: str
+    emergency_phone: str
+    location: str
+
+@app.post("/api/sos")
+async def trigger_sos(payload: SosPayload):
+    event_id = str(uuid4())
+    ts = datetime.utcnow().isoformat()
+    
+    conn = sqlite3.connect('carelink_v2.db')
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO sos_events (event_id, patient_email, patient_name, emergency_phone, location, timestamp, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (event_id, payload.patient_email, payload.patient_name, payload.emergency_phone, payload.location, ts, 'active'))
+    conn.commit()
+    conn.close()
+
+    return {"status": "success", "event_id": event_id}
+
+@app.get("/api/sos")
+async def get_all_sos():
+    conn = sqlite3.connect('carelink_v2.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM sos_events ORDER BY timestamp DESC")
+    columns = [column[0] for column in cursor.description]
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    conn.close()
+    return {"status": "success", "data": results}
+
+@app.post("/api/sos/{event_id}/resolve")
+async def resolve_sos(event_id: str):
+    conn = sqlite3.connect('carelink_v2.db')
+    cursor = conn.cursor()
+    cursor.execute("UPDATE sos_events SET status = 'resolved' WHERE event_id = ?", (event_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8008)

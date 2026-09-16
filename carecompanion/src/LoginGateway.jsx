@@ -102,15 +102,14 @@ export default function LoginGateway({ onLogin }) {
       setIsGoogleSignIn(false);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      const res = await fetch('http://127.0.0.1:8008/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: userCredential.user.email })
-      });
-      const data = await res.json();
+      const { rtdb } = await import('./firebase');
+      const { ref, get } = await import('firebase/database');
+      const emailKey = userCredential.user.email.replace(/\./g, ',');
+      const snapshot = await get(ref(rtdb, `users/${emailKey}`));
       
-      if (data.exists) {
-        onLogin({ email: userCredential.user.email, role: data.role, ...data.data });
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        onLogin({ email: userCredential.user.email, ...data });
       } else {
         setStep('choose_role');
       }
@@ -122,26 +121,24 @@ export default function LoginGateway({ onLogin }) {
 
   const handleGoogleSignIn = async () => {
     try {
-      setError('');
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       console.log("Sign-in completed:", result.user.email);
       
-      const res = await fetch('http://127.0.0.1:8008/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: result.user.email })
-      });
-      const data = await res.json();
+      const { rtdb } = await import('./firebase');
+      const { ref, get } = await import('firebase/database');
+      const emailKey = result.user.email.replace(/\./g, ',');
+      const snapshot = await get(ref(rtdb, `users/${emailKey}`));
       
-      if (!data.exists) {
+      if (!snapshot.exists()) {
         console.log("User is new. Setting step to choose_role.");
         setIsGoogleSignIn(true);
         setEmail(result.user.email || '');
         setStep('choose_role');
       } else {
-        console.log("User already exists in local DB! Logging in...");
-        onLogin({ email: result.user.email, role: data.role, ...data.data });
+        console.log("User already exists in DB! Logging in...");
+        const data = snapshot.val();
+        onLogin({ email: result.user.email, ...data });
       }
     } catch (err) {
       if (err.code !== 'auth/popup-closed-by-user') {
@@ -182,26 +179,25 @@ export default function LoginGateway({ onLogin }) {
         doctor_email: patientData.doctor_email,
         emergencyPhone: patientData.emergencyPhone,
         dementia_level: patientData.dementia_level,
-        stage: patientData.stage
+        stage: patientData.stage,
+        role: 'patient'
       };
 
-      const res = await fetch('http://127.0.0.1:8008/api/register/patient', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const { rtdb } = await import('./firebase');
+      const { ref, set } = await import('firebase/database');
       
-      if (!data.success) {
-        setError(data.message || "Registration failed on backend.");
-        return;
+      try {
+        const emailKey = email.replace(/\./g, ',');
+        await set(ref(rtdb, `users/${emailKey}`), payload);
+      } catch (err) {
+        console.warn("Could not sync registration to Firebase. Ensure databaseURL is correct.", err);
       }
 
       const routinesToCreate = [
         { title: 'Wake Up & Water', detail: '1 Large Glass of water', category: 'HEALTH ☀️', time: scheduleData.wakeTime, reqPhoto: 0 },
-        { title: 'Breakfast & Meds', detail: 'Morning routine', category: 'MEAL 🍲', time: scheduleData.breakfastTime, reqPhoto: 1 },
-        { title: 'Lunch', detail: 'Afternoon meal', category: 'MEAL 🍲', time: scheduleData.lunchTime, reqPhoto: 0 },
-        { title: 'Dinner', detail: 'Evening meal', category: 'MEAL 🍲', time: scheduleData.dinnerTime, reqPhoto: 0 },
+        { title: 'Breakfast & Meds', detail: 'Morning routine', category: 'MEAL 🍽️', time: scheduleData.breakfastTime, reqPhoto: 1 },
+        { title: 'Lunch', detail: 'Afternoon meal', category: 'MEAL 🍽️', time: scheduleData.lunchTime, reqPhoto: 0 },
+        { title: 'Dinner', detail: 'Evening meal', category: 'MEAL 🍽️', time: scheduleData.dinnerTime, reqPhoto: 0 },
         { title: 'Sleep Preparation', detail: 'Wind down', category: 'HEALTH 🌙', time: scheduleData.sleepTime, reqPhoto: 0 }
       ];
 
@@ -217,24 +213,19 @@ export default function LoginGateway({ onLogin }) {
           scheduled_time: r.time,
           is_completed: 0,
           requires_photo: r.reqPhoto,
-          ai_audit_status: r.reqPhoto ? 'pending' : 'none'
+          ai_audit_status: 'none'
         });
 
-        // Sync routine to backend
         try {
-          await fetch('http://127.0.0.1:8008/api/routines', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              task_id,
-              patient_email: email,
-              title: r.title,
-              detail: r.detail,
-              category: r.category,
-              scheduled_time: r.time,
-              requires_photo: r.reqPhoto,
-              ai_audit_status: r.reqPhoto ? 'pending' : 'none'
-            })
+          const emailKey = email.replace(/\./g, ',');
+          await set(ref(rtdb, `users/${emailKey}/routines/${task_id}`), {
+            task_id,
+            title: r.title,
+            detail: r.detail,
+            category: r.category,
+            scheduled_time: r.time,
+            requires_photo: r.reqPhoto,
+            ai_audit_status: r.reqPhoto ? 'pending' : 'none'
           });
         } catch (fetchErr) {
           console.warn("Could not sync routine to backend, but saved locally.", fetchErr);
@@ -270,19 +261,18 @@ export default function LoginGateway({ onLogin }) {
         name: doctorData.name,
         specialty: doctorData.specialty,
         hospital: doctorData.hospital,
-        certificate: doctorData.certificate
+        certificate: doctorData.certificate,
+        role: 'doctor'
       };
       
-      const res = await fetch('http://127.0.0.1:8008/api/register/doctor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const { rtdb } = await import('./firebase');
+      const { ref, set } = await import('firebase/database');
       
-      if (!data.success) {
-        setError(data.message || "Registration failed on backend.");
-        return;
+      try {
+        const emailKey = email.replace(/\./g, ',');
+        await set(ref(rtdb, `users/${emailKey}`), payload);
+      } catch (err) {
+        console.warn("Could not sync doctor to Firebase.", err);
       }
       
       onLogin({ role: 'doctor', email, ...doctorData });
