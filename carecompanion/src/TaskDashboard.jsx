@@ -6,9 +6,11 @@ import {
   ClipboardCheck, Power, Hand
 } from 'lucide-react';
 import { db } from './db';
+import { useT } from './LanguageContext';
 
 export default function TaskDashboard({ onNavigate, currentScreen, routines = [], currentUser }) {
-  const [activeTab, setActiveTab] = useState('alarm'); // alarm, routine, doctor
+  const { t } = useT();
+  const [activeTab, setActiveTab] = useState('alarm'); // alarm, routine
   const [cameraState, setCameraState] = useState('idle'); // idle, captured, verified
   
   // Form input state
@@ -120,16 +122,16 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <button className="flex items-center space-x-1 bg-orange-100 text-orange-800 px-2.5 py-1.5 rounded-lg text-xs font-bold">
-                <Volume2 className="w-3.5 h-3.5" /> <span>Audio</span>
+                <button className="flex items-center space-x-1 bg-orange-100 text-orange-800 px-2.5 py-1.5 rounded-lg text-xs font-bold">
+                <Volume2 className="w-3.5 h-3.5" /> <span>{t('audio_btn')}</span>
               </button>
               <button className="flex items-center space-x-1 bg-[#BC1A22] text-white px-2.5 py-1.5 rounded-lg text-xs font-bold shadow-sm">
-                <AlertTriangle className="w-3.5 h-3.5 fill-white" /> <span>SOS</span>
+                <AlertTriangle className="w-3.5 h-3.5 fill-white" /> <span>{t('sos_button')}</span>
               </button>
             </div>
           </div>
           <div className="text-[11px] font-medium text-slate-500 flex items-center">
-             <User className="w-3 h-3 mr-1" /> Dadi Ji • Caregiver: Mohan
+             <User className="w-3 h-3 mr-1" /> Dadi Ji • {t('caregiver_label')}: Mohan
           </div>
         </header>
 
@@ -141,14 +143,14 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
               className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'alarm' ? 'bg-red-100 text-red-700 shadow-sm border border-red-200' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
             >
               <Clock className="w-4 h-4" />
-              <span>Active Alarm</span>
+              <span>{t('active_alarm')}</span>
             </button>
             <button 
               onClick={() => setActiveTab('routine')}
               className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'routine' ? 'bg-white text-[#0A5C4A] shadow-sm border border-[#0A5C4A]' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
             >
               <CalendarCheck className="w-4 h-4" />
-              <span>Routine ({routines.filter(r => r.status === 'done').length}/{routines.length})</span>
+              <span>{t('routine')} ({routines.filter(r => r.status === 'done').length}/{routines.length})</span>
             </button>
           </div>
         </div>
@@ -160,7 +162,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
               <div className="flex justify-between items-center mb-4">
                 <div className="bg-red-100 text-red-700 font-extrabold px-3 py-1.5 rounded-full text-xs flex items-center shadow-sm">
                   <Clock className="w-3.5 h-3.5 mr-1.5 animate-pulse" />
-                  ALARM SOUNDING
+                  {t('alarm_sounding')}
                 </div>
                 <span className="text-red-700 font-black text-xl">10:00 AM</span>
               </div>
@@ -170,7 +172,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
 
               <div className="bg-emerald-50 rounded-xl p-3 flex items-start space-x-2 mb-4 border border-emerald-100">
                 <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-                <span className="text-xs font-bold text-emerald-800">Hold palm flat under camera to verify dose for <span className="underline">Dr. Ananya</span>.</span>
+                <span className="text-xs font-bold text-emerald-800">{t('hold_palm')} <span className="underline">{t('doctor_name')}</span>.</span>
               </div>
 
               {/* Camera Simulation Viewport */}
@@ -178,7 +180,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                 {cameraState === 'idle' ? (
                   <button onClick={handleTakePhoto} className="flex flex-col items-center text-slate-400 hover:text-emerald-600 transition-colors">
                     <Camera className="w-12 h-12 mb-2" />
-                    <span className="font-bold text-sm">Tap to Open Camera</span>
+                    <span className="font-bold text-sm">{t('tap_camera')}</span>
                   </button>
                 ) : (
                   <div className="w-full h-full relative bg-amber-50/50 flex items-center justify-center">
@@ -186,14 +188,12 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                     <div className="w-8 h-8 bg-white rounded-full border-2 border-slate-300 shadow-md z-10 animate-pulse flex items-center justify-center">
                        <div className="w-10 h-10 border-2 border-dashed border-emerald-500 rounded-full absolute animate-spin-slow"></div>
                     </div>
-                    
                     <div className="absolute top-2 left-2 font-black text-[10px] tracking-widest text-white bg-black/40 px-2 py-1 rounded">
                       [PALM DETECTED]
                     </div>
                     <div className="absolute top-2 right-2 font-bold text-[10px] text-white bg-black/40 px-2 py-1 rounded">
                       100% FOCUS
                     </div>
-                    
                     {cameraState === 'verified' && (
                       <div className="absolute bottom-2 left-2 right-2 bg-black/70 backdrop-blur-md rounded-lg p-2 flex justify-between items-center text-white">
                         <div className="flex items-center space-x-1.5">
@@ -220,7 +220,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                   className={`w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center space-x-2 transition-all ${cameraState === 'verified' ? 'bg-[#0A5C4A] text-white active:scale-95 shadow-md' : 'bg-slate-100 text-slate-400'}`}
                 >
                   <CheckCircle2 className="w-5 h-5" />
-                  <span>Confirm & Silence Alarm</span>
+                  <span>{t('confirm_silence')}</span>
                 </button>
               </div>
             </div>
@@ -228,9 +228,9 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
             <div className="mt-4 bg-[#F0F4F8] rounded-xl p-3 flex items-center justify-between border border-slate-200">
               <div className="flex items-center space-x-1.5 text-slate-500">
                 <Shield className="w-4 h-4 text-[#0A5C4A]" />
-                <span className="text-[10px] font-bold">Encrypted SQLCipher</span>
+                <span className="text-[10px] font-bold">{t('encrypted_db')}</span>
               </div>
-              <span className="text-[10px] font-bold text-slate-500">Auto-sync on connect</span>
+              <span className="text-[10px] font-bold text-slate-500">{t('auto_sync')}</span>
             </div>
           </div>
         )}
@@ -241,7 +241,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
             <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-200 mb-4">
               <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center">
                 <CalendarCheck className="w-5 h-5 mr-2 text-blue-600" />
-                Edit Daily Routine
+                {t('add_routine_title')}
               </h2>
               
               {/* Add Routine Form */}
@@ -249,7 +249,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                 <div className="flex space-x-2 mb-3">
                   <input 
                     type="text" 
-                    placeholder="Task Name" 
+                    placeholder={t('task_name_placeholder')}
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-medium outline-none focus:border-blue-500"
@@ -269,10 +269,10 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                       onChange={(e) => setNewRequiresPhoto(e.target.checked)}
                       className="w-4 h-4 rounded text-blue-600"
                     />
-                    <span>Require Photo Audit?</span>
+                    <span>{t('requires_photo_label')}</span>
                   </label>
                   <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center">
-                    <Plus className="w-4 h-4 mr-1" /> Add Task
+                    <Plus className="w-4 h-4 mr-1" /> {t('add_task_btn')}
                   </button>
                 </div>
               </form>
@@ -303,16 +303,16 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
           </div>
         )}
 
-        {/* ROUTINE QUICK GLANCE FOOTER (Visible on Alarm tab) */}
+        {/* ROUTINE QUICK GLANCE FOOTER */}
         {activeTab === 'alarm' && (
           <div className="absolute bottom-20 w-full px-4 pb-2 bg-gradient-to-t from-[#F8F9FB] via-[#F8F9FB] to-transparent pt-6">
             <div className="bg-white border border-slate-200 rounded-3xl p-3 shadow-sm">
               <div className="flex justify-between items-center mb-3 px-1">
                 <div className="flex items-center space-x-2 text-[#0A5C4A]">
                   <CalendarCheck className="w-4 h-4" />
-                  <span className="text-xs font-extrabold">Routine Quick Glance</span>
+                  <span className="text-xs font-extrabold">{t('routine_quick_glance')}</span>
                 </div>
-                <button onClick={() => setActiveTab('routine')} className="text-xs font-bold text-blue-600">View All ({routines.length}) {'>'}</button>
+                <button onClick={() => setActiveTab('routine')} className="text-xs font-bold text-blue-600">{t('view_all', { n: routines.length })} {'>'}</button>
               </div>
               <div className="flex space-x-2 overflow-x-auto [&::-webkit-scrollbar]:hidden pb-1">
                 {routines.map((routine) => (
@@ -322,7 +322,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                     </div>
                     <div>
                       <div className={`text-xs font-bold ${routine.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{routine.title.split(' ')[0]}...</div>
-                      <div className="text-[10px] font-semibold text-slate-500">{routine.status === 'done' ? `Done ${formatTime(routine.time)}` : 'Tap to log'}</div>
+                      <div className="text-[10px] font-semibold text-slate-500">{routine.status === 'done' ? `Done ${formatTime(routine.time)}` : t('tap_to_log')}</div>
                     </div>
                   </div>
                 ))}
@@ -331,13 +331,13 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
           </div>
         )}
 
-        {/* BOTTOM NAVIGATION BAR */}
+        {/* BOTTOM NAV */}
         <nav className="absolute bottom-0 w-full border-t border-slate-100 bg-white px-2 py-2 flex items-center justify-between z-10 rounded-b-3xl">
           {[
-            { id: 'daily_fun', label: 'Daily Fun', icon: Smile },
-            { id: 'therapy', label: 'Therapy Games', icon: Puzzle },
-            { id: 'tasks', label: 'Tasks', icon: ClipboardCheck },
-            { id: 'doctor', label: 'Doctor Care', icon: Stethoscope },
+            { id: 'daily_fun', labelKey: 'nav_daily_fun', icon: Smile },
+            { id: 'therapy', labelKey: 'nav_therapy_games', icon: Puzzle },
+            { id: 'tasks', labelKey: 'nav_tasks', icon: ClipboardCheck },
+            { id: 'doctor', labelKey: 'nav_doctor', icon: Stethoscope },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = currentScreen === item.id;
@@ -350,7 +350,7 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                 }`}
               >
                 <Icon className={`w-5 h-5 mb-1 ${isActive ? "stroke-[2.5]" : "stroke-2"}`} />
-                <span className={`text-[10px] ${isActive ? "font-extrabold" : "font-medium"}`}>{item.label}</span>
+                <span className={`text-[10px] ${isActive ? "font-extrabold" : "font-medium"}`}>{t(item.labelKey)}</span>
               </button>
             );
           })}
