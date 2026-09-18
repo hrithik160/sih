@@ -6,6 +6,7 @@ import {
   Lock, Brain, Smile, Pill, Stethoscope, Settings2, CheckCircle2, Map,
   Coins, Ear, Compass, Bird, Mic, Dog
 } from 'lucide-react';
+import { useT } from './LanguageContext';
 
 // Common styling
 const PageContainer = ({ title, level, children }) => (
@@ -920,6 +921,7 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
     return null;
   };
 
+  const { t } = useT();
   const gameElement = renderGame();
 
   if (gameElement) {
@@ -931,10 +933,17 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
     );
   }
 
+  const navItems = [
+    { id: 'daily_fun', labelKey: 'nav_daily_fun', icon: Smile },
+    { id: 'therapy', labelKey: 'nav_therapy', icon: Puzzle },
+    { id: 'meds', labelKey: 'nav_meds_photos', icon: Pill },
+    { id: 'doctor', labelKey: 'nav_doctor', icon: Stethoscope },
+  ];
+
   return (
     <div className="min-h-screen bg-[#F8F9FB] text-slate-800 flex justify-center items-start p-2 sm:p-4 select-none font-sans">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col overflow-hidden relative min-h-[850px] max-h-[90vh]">
-        
+
         {/* HEADER */}
         <header className="px-4 py-4 bg-white flex items-center justify-between border-b border-slate-100 sticky top-0 z-20">
           <div className="flex items-center space-x-3">
@@ -942,97 +951,90 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="font-extrabold text-[#0A5C4A] text-lg leading-tight">AI Therapy Suite</h1>
+              <h1 className="font-extrabold text-[#0A5C4A] text-lg leading-tight">{t('therapy_suite_title')}</h1>
               <div className="flex items-center space-x-1 mt-0.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide">AI DDA Engine Active</span>
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide">{t('ai_dda_active')}</span>
               </div>
             </div>
           </div>
-          <button className="px-4 h-10 bg-[#BC1A22] text-white rounded-xl flex items-center justify-center font-black shadow-sm">SOS</button>
+          <button className="px-4 h-10 bg-[#BC1A22] text-white rounded-xl flex items-center justify-center font-black shadow-sm">{t('sos_button')}</button>
         </header>
 
         <div className="flex-1 overflow-y-auto pb-24 [&::-webkit-scrollbar]:hidden p-5">
-          
           <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 mb-6 text-center shadow-sm">
-             <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Individual AI Difficulty Engine Active</span>
-             <p className="text-sm font-medium text-slate-400 mt-1">Each game now adapts to you individually!</p>
+            <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{t('individual_ai_active')}</span>
+            <p className="text-sm font-medium text-slate-400 mt-1">{t('individual_ai_desc')}</p>
           </div>
 
-          <h2 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4 ml-1">9-Game Cognitive Suite</h2>
+          <h2 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4 ml-1">{t('cognitive_suite_title')}</h2>
              
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button onClick={() => setActiveGame('nature')} className="bg-emerald-50 border border-emerald-100 p-5 rounded-3xl flex flex-col items-center hover:bg-emerald-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Leaf className="w-8 h-8 text-emerald-600" /></div>
-              <span className="font-bold text-emerald-900 text-[13px] text-center mb-2">Nature Recall</span>
-              <span className="text-[10px] bg-emerald-200 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.nature}</span>
+              <span className="font-bold text-emerald-900 text-[13px] text-center mb-2">{t('game_nature_recall')}</span>
+              <span className="text-[10px] bg-emerald-200 text-emerald-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.nature })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('routine')} className="bg-blue-50 border border-blue-100 p-5 rounded-3xl flex flex-col items-center hover:bg-blue-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Layout className="w-8 h-8 text-blue-600" /></div>
-              <span className="font-bold text-blue-900 text-[13px] text-center mb-2">Daily Routine</span>
-              <span className="text-[10px] bg-blue-200 text-blue-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.routine}</span>
+              <span className="font-bold text-blue-900 text-[13px] text-center mb-2">{t('game_daily_routine')}</span>
+              <span className="text-[10px] bg-blue-200 text-blue-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.routine })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('money')} className="bg-amber-50 border border-amber-100 p-5 rounded-3xl flex flex-col items-center hover:bg-amber-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Coins className="w-8 h-8 text-amber-600" /></div>
-              <span className="font-bold text-amber-900 text-[13px] text-center mb-2">Money Match</span>
-              <span className="text-[10px] bg-amber-200 text-amber-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.money}</span>
+              <span className="font-bold text-amber-900 text-[13px] text-center mb-2">{t('game_money_match')}</span>
+              <span className="text-[10px] bg-amber-200 text-amber-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.money })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('tray')} className="bg-purple-50 border border-purple-100 p-5 rounded-3xl flex flex-col items-center hover:bg-purple-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Brain className="w-8 h-8 text-purple-600" /></div>
-              <span className="font-bold text-purple-900 text-[13px] text-center mb-2">Memory Tray</span>
-              <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.tray}</span>
+              <span className="font-bold text-purple-900 text-[13px] text-center mb-2">{t('game_memory_tray')}</span>
+              <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.tray })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('calm')} className="bg-pink-50 border border-pink-100 p-5 rounded-3xl flex flex-col items-center hover:bg-pink-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Palette className="w-8 h-8 text-pink-600" /></div>
-              <span className="font-bold text-pink-900 text-[13px] text-center mb-2">Creative Calm</span>
-              <span className="text-[10px] bg-pink-200 text-pink-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.calm}</span>
+              <span className="font-bold text-pink-900 text-[13px] text-center mb-2">{t('game_creative_calm')}</span>
+              <span className="text-[10px] bg-pink-200 text-pink-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.calm })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('sound')} className="bg-indigo-50 border border-indigo-100 p-5 rounded-3xl flex flex-col items-center hover:bg-indigo-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Ear className="w-8 h-8 text-indigo-600" /></div>
-              <span className="font-bold text-indigo-900 text-[13px] text-center mb-2">Sound Guess</span>
-              <span className="text-[10px] bg-indigo-200 text-indigo-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.sound}</span>
+              <span className="font-bold text-indigo-900 text-[13px] text-center mb-2">{t('game_sound_guess')}</span>
+              <span className="text-[10px] bg-indigo-200 text-indigo-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.sound })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('explore')} className="bg-orange-50 border border-orange-100 p-5 rounded-3xl flex flex-col items-center hover:bg-orange-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Compass className="w-8 h-8 text-orange-600" /></div>
-              <span className="font-bold text-orange-900 text-[13px] text-center mb-2">Explore & Learn</span>
-              <span className="text-[10px] bg-orange-200 text-orange-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.explore}</span>
+              <span className="font-bold text-orange-900 text-[13px] text-center mb-2">{t('game_explore_learn')}</span>
+              <span className="text-[10px] bg-orange-200 text-orange-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.explore })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('bird')} className="bg-red-50 border border-red-100 p-5 rounded-3xl flex flex-col items-center hover:bg-red-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Dog className="w-8 h-8 text-red-600" /></div>
-              <span className="font-bold text-red-900 text-[13px] text-center mb-2">Feed Dog</span>
-              <span className="text-[10px] bg-red-200 text-red-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.bird}</span>
+              <span className="font-bold text-red-900 text-[13px] text-center mb-2">{t('game_feed_dog')}</span>
+              <span className="text-[10px] bg-red-200 text-red-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.bird })}</span>
             </button>
-            
+
             <button onClick={() => setActiveGame('home')} className="bg-cyan-50 border border-cyan-100 p-5 rounded-3xl flex flex-col items-center hover:bg-cyan-100 transition-all shadow-sm col-span-2 group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Map className="w-8 h-8 text-cyan-600" /></div>
-              <span className="font-bold text-cyan-900 text-[13px] text-center mb-2">Find Your Way Home</span>
-              <span className="text-[10px] bg-cyan-200 text-cyan-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.home}</span>
+              <span className="font-bold text-cyan-900 text-[13px] text-center mb-2">{t('game_find_home')}</span>
+              <span className="text-[10px] bg-cyan-200 text-cyan-800 font-bold px-2 py-0.5 rounded-full">{t('level_label', { n: gameLevels.home })}</span>
             </button>
           </div>
-             
         </div>
 
-        {/* BOTTOM NAVIGATION BAR */}
+        {/* BOTTOM NAV */}
         <nav className="absolute bottom-0 w-full border-t border-slate-100 bg-white px-2 py-2 flex items-center justify-between z-20 rounded-b-3xl pb-safe">
-          {[
-            { id: 'daily_fun', label: 'Daily Fun', icon: Smile },
-            { id: 'therapy', label: 'Therapy', icon: Puzzle },
-            { id: 'meds', label: 'Meds & Photos', icon: Pill },
-            { id: 'doctor', label: 'Doctor Care', icon: Stethoscope },
-          ].map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentScreen === item.id;
             return (
               <button key={item.id} onClick={() => onNavigate(item.id)} className={`flex-1 flex flex-col items-center py-2 px-1 rounded-2xl ${isActive ? "bg-emerald-100 text-[#0A5C4A]" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"}`}>
                 <Icon className={`w-6 h-6 mb-1 ${isActive ? "stroke-[2.5]" : "stroke-2"}`} />
-                <span className={`text-[10px] ${isActive ? "font-extrabold" : "font-medium"}`}>{item.label}</span>
+                <span className={`text-[10px] ${isActive ? "font-extrabold" : "font-medium"}`}>{t(item.labelKey)}</span>
               </button>
             );
           })}
