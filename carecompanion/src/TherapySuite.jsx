@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { saveTelemetryLocal } from './db';
+import PreGameCheckinModal from './PreGameCheckinModal';
 import { 
   ArrowLeft, Volume2, HelpCircle, MessageSquare, Leaf, Puzzle, 
   MessageCircle, Palette, Medal, Layout, Play, Rabbit, Music, 
   Lock, Brain, Smile, Pill, Stethoscope, Settings2, CheckCircle2, Map,
-  Coins, Ear, Compass, Bird, Mic, Dog
+  Coins, Ear, Compass, Bird, Mic, Dog, Heart
 } from 'lucide-react';
 import { useT } from './LanguageContext';
 
@@ -864,6 +865,10 @@ const FindHomeGame = ({ onBack, level, processTelemetry }) => {
 // MASTER DASHBOARD & AI ROUTER
 export default function TherapySuite({ onNavigate, currentScreen, saveGameResult, currentUser }) {
   const [activeGame, setActiveGame] = useState(null); 
+  const [showCheckin, setShowCheckin] = useState(true);
+  const [moodState, setMoodState] = useState({ dayRating: null, moodRating: null });
+  const [flawlessRounds, setFlawlessRounds] = useState(0);
+  const [mismatchDetected, setMismatchDetected] = useState(false);
   
   const defaultLevel = currentUser?.dementia_level || 2;
   const [gameLevels, setGameLevels] = useState({
@@ -890,20 +895,74 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
     }
   }, [activeGame]);
 
+  const handleCheckinComplete = (res) => {
+    setShowCheckin(false);
+    if (!res) return;
+    const { dayRating, moodRating } = res;
+    setMoodState({ dayRating, moodRating });
+
+    const isLowMood = dayRating === 'tough' || moodRating === 'anxious' || moodRating === 'tired';
+    const isHighMood = dayRating === 'great' && moodRating === 'energetic';
+
+    let initialLevel = defaultLevel;
+    if (isLowMood) initialLevel = 1; // Gentle mode for rage-quit prevention
+    else if (isHighMood) initialLevel = Math.min(3, defaultLevel + 1);
+
+    setGameLevels({
+      nature: initialLevel,
+      routine: initialLevel,
+      money: initialLevel,
+      tray: initialLevel,
+      calm: initialLevel,
+      sound: initialLevel,
+      explore: initialLevel,
+      bird: initialLevel,
+      home: initialLevel
+    });
+  };
+
   const processTelemetry = async (gameName, latency, errors, completionSec) => {
     console.log(`📡 Saving [${gameName}] Telemetry...`);
-    await saveTelemetryLocal(gameName, latency, errors, completionSec, currentUser?.email);
 
-    console.log("Using Edge AI logic.");
-    if (activeGame) {
-      setGameLevels(prev => {
-        let currentLevel = prev[activeGame];
-        let nextLevel = currentLevel;
-        if (errors >= 1 || latency > 4000) nextLevel = Math.max(1, currentLevel - 1); 
-        else if (errors === 0 && latency < 2000) nextLevel = Math.min(3, currentLevel + 1); 
-        return { ...prev, [activeGame]: nextLevel };
-      });
+    const isLowMood = moodState.dayRating === 'tough' || moodState.moodRating === 'anxious' || moodState.moodRating === 'tired';
+    let isMismatch = false;
+    let nextFlawless = flawlessRounds;
+
+    if (isLowMood) {
+      if (errors === 0 && latency < 2500) {
+        nextFlawless += 1;
+        if (nextFlawless >= 2) {
+          isMismatch = true;
+          setMismatchDetected(true);
+          console.warn("⚠️ Anti-Exploit: Performance Mismatch Detected! Escalating difficulty.");
+        }
+      } else {
+        nextFlawless = 0;
+      }
     }
+    setFlawlessRounds(nextFlawless);
+
+    let currentLevel = gameLevels[activeGame] || defaultLevel;
+    let nextLevel = currentLevel;
+
+    if (isMismatch) {
+      nextLevel = Math.min(3, currentLevel + 1);
+    } else if (errors >= 1 || latency > 4000) {
+      nextLevel = Math.max(1, currentLevel - 1); 
+    } else if (errors === 0 && latency < 2000) {
+      nextLevel = Math.min(3, currentLevel + 1); 
+    }
+
+    if (activeGame) {
+      setGameLevels(prev => ({ ...prev, [activeGame]: nextLevel }));
+    }
+
+    await saveTelemetryLocal(gameName, latency, errors, completionSec, currentUser?.email, {
+      dayRating: moodState.dayRating,
+      moodRating: moodState.moodRating,
+      effectiveLevel: currentLevel,
+      mismatchFlag: isMismatch
+    });
   };
 
   const handleBack = () => setActiveGame(null);
@@ -942,30 +1001,44 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] text-slate-800 flex justify-center items-start p-2 sm:p-4 select-none font-sans">
+      {showCheckin && (
+        <PreGameCheckinModal 
+          onComplete={handleCheckinComplete} 
+          currentUser={currentUser} 
+        />
+      )}
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col overflow-hidden relative min-h-[850px] max-h-[90vh]">
 
         {/* HEADER */}
         <header className="px-4 py-4 bg-white flex items-center justify-between border-b border-slate-100 sticky top-0 z-20">
           <div className="flex items-center space-x-3">
-            <button className="w-10 h-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center">
+            <button onClick={() => onNavigate && onNavigate('daily_fun')} className="w-10 h-10 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
               <h1 className="font-extrabold text-[#0A5C4A] text-lg leading-tight">{t('therapy_suite_title')}</h1>
-              <div className="flex items-center space-x-1 mt-0.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
-                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wide">{t('ai_dda_active')}</span>
-              </div>
+              <p className="text-[11px] font-medium text-slate-400">Daily Memory & Mind Games</p>
             </div>
           </div>
           <button className="px-4 h-10 bg-[#BC1A22] text-white rounded-xl flex items-center justify-center font-black shadow-sm">{t('sos_button')}</button>
         </header>
 
         <div className="flex-1 overflow-y-auto pb-24 [&::-webkit-scrollbar]:hidden p-5">
-          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 mb-6 text-center shadow-sm">
-            <span className="text-xs font-black text-slate-500 uppercase tracking-widest">{t('individual_ai_active')}</span>
-            <p className="text-sm font-medium text-slate-400 mt-1">{t('individual_ai_desc')}</p>
-          </div>
+          <button 
+            onClick={() => setShowCheckin(true)}
+            className="w-full bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-300 text-emerald-950 rounded-2xl p-3.5 mb-4 flex items-center justify-between font-bold text-xs shadow-sm transition-all active:scale-95"
+          >
+            <div className="flex items-center space-x-2.5">
+              <div className="w-7 h-7 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-700">
+                <Heart className="w-4 h-4 fill-emerald-600" />
+              </div>
+              <div className="text-left">
+                <div className="font-extrabold text-emerald-900 text-sm">{t('checkin_title')}</div>
+                <div className="text-[11px] text-emerald-700 font-medium">{t('q_day_title')}</div>
+              </div>
+            </div>
+            <span className="bg-emerald-600 text-white px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider">{t('checkin_start_games')}</span>
+          </button>
 
           <h2 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4 ml-1">{t('cognitive_suite_title')}</h2>
              
