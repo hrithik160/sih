@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { db } from './db';
 
-export default function TaskDashboard({ onNavigate, currentScreen, routines = [] }) {
+export default function TaskDashboard({ onNavigate, currentScreen, routines = [], currentUser }) {
   const [activeTab, setActiveTab] = useState('alarm'); // alarm, routine, doctor
   const [cameraState, setCameraState] = useState('idle'); // idle, captured, verified
   
@@ -15,6 +15,10 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskTime, setNewTaskTime] = useState('');
   const [newRequiresPhoto, setNewRequiresPhoto] = useState(false);
+
+  const pendingPhotoTask = routines.find(r => r.requires_photo === 1 && r.is_completed === 0);
+
+  const getEmailKey = () => currentUser?.email?.replace(/\./g, ',');
 
   // Safe time formatter: converts "19:30" to "7:30 PM", or leaves plain text intact
   const formatTime = (timeString) => {
@@ -30,15 +34,22 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
 
   const handleTakePhoto = () => {
     setCameraState('captured');
-    setTimeout(() => setCameraState('verified'), 1500);
+    setTimeout(() => {
+      setCameraState('verified');
+      if (pendingPhotoTask) {
+        db.schedule_and_audit.update(pendingPhotoTask.task_id, { is_completed: 1 });
+        import('./firebase').then(({ rtdb }) => {
+          import('firebase/database').then(({ ref, update }) => {
+            const emailKey = getEmailKey();
+            if(emailKey) update(ref(rtdb, `users/${emailKey}/routines/${pendingPhotoTask.task_id}`), { is_completed: 1 });
+          });
+        });
+      }
+    }, 1500);
   };
 
   const handleDismiss = () => {
-    // Mark the pending photo task as completed
-    const pendingPhotoTask = routines.find(r => r.requires_photo === 1 && r.is_completed === 0);
-    if (pendingPhotoTask) {
-      db.schedule_and_audit.update(pendingPhotoTask.task_id, { is_completed: 1 });
-    }
+    onNavigate('daily_fun');
   };
 
   const handleSilenceAlarm = () => {
@@ -52,15 +63,25 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
     e.preventDefault();
     if (!newTaskTitle || !newTaskTime) return;
     
-    await db.schedule_and_audit.add({
-      task_id: 'task_' + Date.now(),
+    const task_id = 'task_' + Date.now();
+    const payload = {
+      task_id,
       title: newTaskTitle,
       detail: 'Added by caretaker',
-      category: 'ROUTINE 🗓️',
+      category: 'ROUTINE 📅',
       scheduled_time: newTaskTime,
       is_completed: 0,
       requires_photo: newRequiresPhoto ? 1 : 0,
       ai_audit_status: 'none'
+    };
+
+    await db.schedule_and_audit.add(payload);
+    
+    import('./firebase').then(({ rtdb }) => {
+      import('firebase/database').then(({ ref, set }) => {
+        const emailKey = getEmailKey();
+        if(emailKey) set(ref(rtdb, `users/${emailKey}/routines/${task_id}`), payload);
+      });
     });
     
     setNewTaskTitle('');
@@ -70,6 +91,12 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
 
   const handleDeleteRoutine = async (id) => {
     await db.schedule_and_audit.delete(id);
+    import('./firebase').then(({ rtdb }) => {
+      import('firebase/database').then(({ ref, remove }) => {
+        const emailKey = getEmailKey();
+        if(emailKey) remove(ref(rtdb, `users/${emailKey}/routines/${id}`));
+      });
+    });
   };
 
   return (
@@ -122,13 +149,6 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
             >
               <CalendarCheck className="w-4 h-4" />
               <span>Routine ({routines.filter(r => r.status === 'done').length}/{routines.length})</span>
-            </button>
-            <button 
-              onClick={() => setActiveTab('doctor')}
-              className={`flex-1 flex items-center justify-center space-x-1.5 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === 'doctor' ? 'bg-white text-blue-600 shadow-sm border border-blue-600' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'}`}
-            >
-              <Stethoscope className="w-4 h-4" />
-              <span>Doctor Desk</span>
             </button>
           </div>
         </div>
@@ -280,25 +300,6 @@ export default function TaskDashboard({ onNavigate, currentScreen, routines = []
                 ))}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* TAB 3: DOCTOR DESK VIEW */}
-        {activeTab === 'doctor' && (
-          <div className="flex-1 overflow-y-auto pb-24 pt-4 px-4 [&::-webkit-scrollbar]:hidden animate-in slide-in-from-right duration-300">
-             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 text-center flex flex-col items-center">
-                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
-                  <Stethoscope className="w-10 h-10" />
-                </div>
-                <h2 className="text-xl font-black text-slate-800 mb-2">Doctor Portal Sync</h2>
-                <p className="text-sm text-slate-500 font-medium mb-6">
-                  Dr. Ananya's clinical adjustments and custom prescriptions will appear here once connected to AWS Cloud.
-                </p>
-                <div className="flex items-center space-x-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-full text-xs font-bold">
-                  <Power className="w-4 h-4 text-amber-500" />
-                  <span>Awaiting Network Connection...</span>
-                </div>
-             </div>
           </div>
         )}
 

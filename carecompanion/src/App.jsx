@@ -26,23 +26,21 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log("App.jsx: onAuthStateChanged fired. User:", user ? user.email : null);
       if (user) {
-        console.log("App.jsx: Fetching user data from local backend for", user.email);
+        console.log("App.jsx: Fetching user data from Firebase for", user.email);
         try {
-          const res = await fetch('http://127.0.0.1:8008/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email })
-          });
-          const data = await res.json();
-          console.log("App.jsx: Does user exist in local db?", data.exists);
-          if (data.exists) {
-            console.log("App.jsx: User exists in local DB, setting currentUser state.");
-            setCurrentUser({ email: user.email, role: data.role, ...data.data });
+          const { rtdb } = await import('./firebase');
+          const { ref, get } = await import('firebase/database');
+          const emailKey = user.email.replace(/\./g, ',');
+          const snapshot = await get(ref(rtdb, `users/${emailKey}`));
+          
+          if (snapshot.exists()) {
+            console.log("App.jsx: User exists in Firebase, setting currentUser state.");
+            setCurrentUser({ email: user.email, ...snapshot.val() });
           } else {
-            console.log("App.jsx: User does NOT exist in local DB. Waiting for LoginGateway to handle registration.");
+            console.log("App.jsx: User does NOT exist in Firebase. Waiting for LoginGateway to handle registration.");
           }
         } catch (err) {
-          console.error("App.jsx: Failed to connect to local backend", err);
+          console.error("App.jsx: Failed to connect to Firebase", err);
         }
       } else {
         console.log("App.jsx: No user, setting currentUser to null.");
@@ -102,9 +100,9 @@ export default function App() {
     currentUserRef.current = currentUser;
   }, [currentUser]);
 
-  // --- 5. BACKGROUND AWS SYNC ENGINE (STORE & FORWARD) ---
+  // --- 5. BACKGROUND FIREBASE SYNC ENGINE (STORE & FORWARD) ---
   useEffect(() => {
-    const syncDataToAWS = async () => {
+    const syncDataToFirebase = async () => {
       // 1. If the device has no Wi-Fi, don't even try.
       if (!navigator.onLine) return;
 
@@ -114,40 +112,44 @@ export default function App() {
         if (unsyncedLogs.length === 0) return; // Nothing to sync!
 
         const currentEmail = currentUserRef.current?.email || 'unknown';
-        const logsWithEmail = unsyncedLogs.map(log => ({
-           ...log,
-           patient_email: (log.patient_email && log.patient_email !== 'unknown') ? log.patient_email : currentEmail
-        }));
+        const { rtdb } = await import('./firebase');
+        const { ref, push } = await import('firebase/database');
 
-        // 3. Send the batch to the FastAPI Cloud Receiver
-        const response = await fetch('http://127.0.0.1:8008/api/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ logs: logsWithEmail })
-        });
+        // 3. Send the batch to Firebase Realtime Database
+        await Promise.all(
+          unsyncedLogs.map(async (log) => {
+            const emailKey = (log.patient_email && log.patient_email !== 'unknown') ? log.patient_email.replace(/\./g, ',') : currentEmail.replace(/\./g, ',');
+            const telemetryRef = ref(rtdb, `users/${emailKey}/telemetry`);
+            await push(telemetryRef, {
+              game_id: log.game_id,
+              timestamp: log.timestamp,
+              latency_ms: log.latency_ms,
+              error_count: log.error_count,
+              duration_sec: log.duration_sec
+            });
+          })
+        );
 
-        if (response.ok) {
-          // 4. Success! Mark all of these records as synced in the local database
-          await Promise.all(
-            unsyncedLogs.map(log => db.telemetry_logs.update(log.id, { sync_status: 1 }))
-          );
-          console.log(`☁️ Synced ${unsyncedLogs.length} records to AWS.`);
-        }
+        // 4. Success! Mark all of these records as synced in the local database
+        await Promise.all(
+          unsyncedLogs.map(log => db.telemetry_logs.update(log.id, { sync_status: 1 }))
+        );
+        console.log(`📡 Synced ${unsyncedLogs.length} records to Firebase!`);
       } catch (err) {
         // 5. If the server is down, fail silently. It will just try again later.
-        console.warn("Backend unreachable. Keeping data in local offline storage.");
+        console.warn("Firebase unreachable. Keeping data in local offline storage.", err);
       }
     };
 
     // Run the sync engine every 5 seconds in the background
-    const syncInterval = setInterval(syncDataToAWS, 5000);
+    const syncInterval = setInterval(syncDataToFirebase, 5000);
     
     // Instantly try to sync the exact second the Wi-Fi turns back on
-    window.addEventListener('online', syncDataToAWS);
+    window.addEventListener('online', syncDataToFirebase);
 
     return () => {
       clearInterval(syncInterval);
-      window.removeEventListener('online', syncDataToAWS);
+      window.removeEventListener('online', syncDataToFirebase);
     };
   }, []);
 
@@ -155,6 +157,14 @@ export default function App() {
   const quickDismissTask = async (taskId) => {
     await db.schedule_and_audit.update(taskId, { is_completed: 1 });
     setActiveAlarm(null);
+    try {
+      const { rtdb } = await import('./firebase');
+      const { ref, update } = await import('firebase/database');
+      const emailKey = currentUserRef.current?.email.replace(/\./g, ',');
+      await update(ref(rtdb, `users/${emailKey}/routines/${taskId}`), { is_completed: 1 });
+    } catch (err) {
+      console.warn("Could not sync task completion to Firebase", err);
+    }
   };
 
   const handleLogout = async () => {
@@ -174,8 +184,8 @@ export default function App() {
 
   const renderPatientView = () => {
     if (currentScreen === 'therapy') return <TherapySuite onNavigate={setCurrentScreen} currentScreen={currentScreen} currentUser={currentUser} />;
-    if (currentScreen === 'tasks') return <TaskDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} routines={routines} />;
-    if (currentScreen === 'doctor') return <DoctorCare onNavigate={setCurrentScreen} currentScreen={currentScreen} />;
+    if (currentScreen === 'tasks') return <TaskDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} routines={routines} currentUser={currentUser} />;
+    if (currentScreen === 'doctor') return <DoctorCare onNavigate={setCurrentScreen} currentScreen={currentScreen} currentUser={currentUser} />;
     
     return <PatientDashboard onNavigate={setCurrentScreen} currentScreen={currentScreen} gameHistory={gameHistory} prescribedGame={prescribedGame} routines={routines} />;
   };

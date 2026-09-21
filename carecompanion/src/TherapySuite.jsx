@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import note10Asset from './assets/money/note-10.svg';
+import note20Asset from './assets/money/note-20.svg';
+import note50Asset from './assets/money/note-50.svg';
+import note100Asset from './assets/money/note-100.svg';
+import coin1Asset from './assets/money/coin-1.svg';
+import coin2Asset from './assets/money/coin-2.svg';
+import coin5Asset from './assets/money/coin-5.svg';
+import coin10Asset from './assets/money/coin-10.svg';
+import coin20Asset from './assets/money/coin-20.svg';
 import { saveTelemetryLocal } from './db';
 import { 
   ArrowLeft, Volume2, HelpCircle, MessageSquare, Leaf, Puzzle, 
   MessageCircle, Palette, Medal, Layout, Play, Rabbit, Music, 
   Lock, Brain, Smile, Pill, Stethoscope, Settings2, CheckCircle2, Map,
-  Coins, Ear, Compass, Bird, Mic
+  Coins, Ear, Compass, Bird, Mic, Dog
 } from 'lucide-react';
 
 // Common styling
@@ -115,7 +124,12 @@ const NatureRecallGame = ({ onBack, level, processTelemetry }) => {
 
 // 2. DAILY ROUTINE
 const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
-  const fullRoutine = ['Wake up 🌅', 'Brush 🪥', 'Breakfast 🍳', 'Medicine 💊', 'Walk 🚶', 'Lunch 🍱', 'Rest 🛏️'];
+  const fullRoutine = [
+    'Wake up 🌅', 'Brush Teeth 🪥', 'Take Shower 🚿', 'Breakfast 🍳', 
+    'Morning Walk 🚶', 'Take Medicine 💊', 'Read Book 📖', 'Lunch 🍲', 
+    'Afternoon Rest 🛋️', 'Watch TV 📺', 'Have Dinner 🍽️', 'Go to Sleep 🌙'
+  ];
+  
   const count = level === 1 ? 3 : level === 2 ? 5 : 7;
   
   const [phase, setPhase] = useState('observe');
@@ -127,14 +141,22 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
   const [qType, setQType] = useState('sequence'); // sequence or after
 
   useEffect(() => {
-    const routine = fullRoutine.slice(0, count);
+    // Pick random indices and sort chronologically
+    let indices = [];
+    while (indices.length < count) {
+      let r = Math.floor(Math.random() * fullRoutine.length);
+      if (!indices.includes(r)) indices.push(r);
+    }
+    indices.sort((a,b) => a - b);
+    const routine = indices.map(i => fullRoutine[i]);
+    
     setTargetRoutine(routine);
     setShuffled(shuffle(routine));
     
     const type = level > 1 && Math.random() > 0.5 ? 'after' : 'sequence';
     setQType(type);
     
-    setTimeout(() => setPhase('question'), level === 1 ? 5000 : 3000);
+    setTimeout(() => setPhase('question'), level === 1 ? 5000 : 4000);
   }, [level]);
 
   const selectItem = (item) => {
@@ -148,20 +170,26 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
         setWon(true);
       } else {
         processTelemetry('DailyRoutine', 1000, 1, (Date.now() - startTime)/1000);
-        setCurrentOrder([]);
-        setShuffled(shuffle(targetRoutine));
+        // Let them see their mistake briefly
+        setTimeout(() => {
+          setCurrentOrder([]);
+          setShuffled(shuffle(targetRoutine));
+        }, 1000);
       }
     }
   };
 
+  const deselectItem = (item) => {
+    const newOrder = currentOrder.filter(i => i !== item);
+    setCurrentOrder(newOrder);
+    setShuffled([...shuffled, item]);
+  };
+
   const handleAfterGuess = (item) => {
-    const targetIdx = 2; // after breakfast
-    if (item === fullRoutine[targetIdx]) {
-      processTelemetry('DailyRoutine', 1000, 0, (Date.now() - startTime)/1000);
-      setWon(true);
-    } else {
-      processTelemetry('DailyRoutine', 1000, 1, (Date.now() - startTime)/1000);
-    }
+    // For 'after' questions, we ask what happens AFTER a specific event.
+    // Pick a random event from targetRoutine except the last one
+    // But since we didn't store the question target, let's keep it simple
+    // The previous code hardcoded targetIdx = 2. Let's fix that.
   };
 
   return (
@@ -170,40 +198,67 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
         <div className="flex flex-col gap-3 w-full">
           <p className="text-center font-bold text-slate-600 mb-2">Remember your routine:</p>
           {targetRoutine.map((r, i) => (
-             <div key={i} className="bg-white p-4 rounded-xl shadow text-center font-bold text-lg text-emerald-800">{r}</div>
+             <div key={i} className="bg-white p-4 rounded-xl shadow text-center font-bold text-lg text-emerald-800 animate-fade-in">{r}</div>
           ))}
         </div>
       )}
       {phase === 'question' && !won && qType === 'sequence' && (
         <div className="w-full">
+           <p className="text-center font-bold text-slate-600 mb-4 text-sm">Tap activities to fill the slots in order. Tap a filled slot to remove it.</p>
            <div className="flex flex-col gap-3 mb-6">
-             {Array.from({length: targetRoutine.length}).map((_, i) => (
-               <div key={i} className="h-14 border-2 border-dashed border-emerald-300 rounded-xl flex items-center justify-center bg-white font-bold text-lg text-slate-700">
-                 {currentOrder[i] || `Step ${i+1}`}
-               </div>
-             ))}
+             {Array.from({length: targetRoutine.length}).map((_, i) => {
+               const item = currentOrder[i];
+               return (
+                 <div 
+                   key={i} 
+                   onClick={() => item ? deselectItem(item) : null}
+                   className={`h-14 border-2 ${item ? 'border-emerald-500 bg-emerald-50 shadow-sm cursor-pointer' : 'border-dashed border-emerald-300 bg-white'} rounded-xl flex items-center justify-center font-bold text-lg ${item ? 'text-emerald-900' : 'text-slate-400'} transition-all`}
+                 >
+                   {item || `Slot ${i+1}`}
+                 </div>
+               );
+             })}
            </div>
+           
            <div className="flex flex-wrap gap-2 justify-center">
              {shuffled.map((item, i) => (
-               <button key={i} onClick={() => selectItem(item)} className="p-3 bg-white border-2 border-emerald-200 shadow-sm rounded-xl font-bold text-emerald-800 hover:bg-emerald-50">{item}</button>
+               <button key={i} onClick={() => selectItem(item)} className="p-3 bg-white border-2 border-emerald-200 shadow-sm rounded-xl font-bold text-emerald-800 hover:bg-emerald-50 active:scale-95 transition-all">{item}</button>
              ))}
            </div>
         </div>
       )}
+      
       {phase === 'question' && !won && qType === 'after' && (
-        <div className="text-center w-full">
-          <p className="text-2xl font-bold mb-8 text-emerald-900">What do you usually do after {fullRoutine[1]}?</p>
-          <div className="flex flex-col gap-4">
-             {shuffle(['Medicine 💊', 'Breakfast 🍳', 'Lunch 🍱', 'Rest 🛏️']).map((opt, i) => (
-               <button key={i} onClick={() => handleAfterGuess(opt)} className="p-4 bg-white rounded-xl shadow text-xl font-bold hover:bg-emerald-100">{opt}</button>
+        <div className="w-full">
+           <p className="text-center font-bold text-slate-600 mb-4 text-lg">What happens AFTER <br/><span className="text-emerald-700 text-2xl">{targetRoutine[0]}?</span></p>
+           <div className="flex flex-col gap-3 justify-center">
+             {shuffle([...targetRoutine]).map((item, i) => (
+               <button 
+                 key={i} 
+                 onClick={() => {
+                   if (item === targetRoutine[1]) {
+                     processTelemetry('DailyRoutine', 1000, 0, (Date.now() - startTime)/1000);
+                     setWon(true);
+                   } else {
+                     processTelemetry('DailyRoutine', 1000, 1, (Date.now() - startTime)/1000);
+                   }
+                 }} 
+                 className="p-4 bg-white border-2 border-emerald-200 shadow-sm rounded-xl font-bold text-emerald-800 hover:bg-emerald-50 active:scale-95 transition-all"
+               >
+                 {item}
+               </button>
              ))}
-          </div>
+           </div>
         </div>
       )}
+
       {won && (
-        <div className="text-center mt-10">
-          <div className="text-8xl mb-8">✅</div>
-          <button onClick={onBack} className="bg-emerald-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
+        <div className="text-center animate-bounce-in w-full flex flex-col items-center">
+          <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+             <CheckCircle2 className="w-16 h-16 text-emerald-600" />
+          </div>
+          <h2 className="text-3xl font-black text-emerald-800 mb-2">Perfect Sequence!</h2>
+          <button onClick={onBack} className="mt-8 bg-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg active:scale-95 transition-all w-full">Back to Suite</button>
         </div>
       )}
     </PageContainer>
@@ -212,202 +267,465 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
 
 // 3. MONEY MATCH
 const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
+  const [startTime] = useState(() => Date.now());
+  const [mistakes, setMistakes] = useState(0);
+  const [feedback, setFeedback] = useState('');
   const [won, setWon] = useState(false);
-  const [startTime] = useState(Date.now());
-  
-  const price = level === 1 ? 20 : level === 2 ? 30 : 30;
-  const have = level === 3 ? 50 : 0;
-  
-  const options = level === 1 
-    ? [{label: '₹10', val: 10}, {label: '₹20', val: 20}, {label: '₹50', val: 50}]
-    : level === 2
-    ? [{label: '₹10 + ₹10 + ₹10', val: 30}, {label: '₹20 + ₹20', val: 40}, {label: '₹50', val: 50}]
-    : [{label: '₹10', val: 10}, {label: '₹20', val: 20}, {label: '₹30', val: 30}];
+  const [selectedMoney, setSelectedMoney] = useState(null);
+  const [sortedItems, setSortedItems] = useState([]);
+  const [selectedChoice, setSelectedChoice] = useState(null);
+  const [sortingQuestionIndex, setSortingQuestionIndex] = useState(0);
+  const [sortingJarIndex, setSortingJarIndex] = useState(0);
+  const [questionStep, setQuestionStep] = useState(0);
+  const [jarHovered, setJarHovered] = useState(false);
+  const [sortingTransitioning, setSortingTransitioning] = useState(false);
 
-  const correctVal = level === 3 ? (have - price) : price;
-
-  const handleSelect = (val) => {
-    if (val === correctVal) {
-      processTelemetry('MoneyMatch', 1000, 0, (Date.now() - startTime)/1000);
-      setWon(true);
-    } else {
-      processTelemetry('MoneyMatch', 1000, 1, (Date.now() - startTime)/1000);
+  const currencyAssets = {
+    Note: { 10: note10Asset, 20: note20Asset, 50: note50Asset, 100: note100Asset },
+    Coin: { 1: coin1Asset, 2: coin2Asset, 5: coin5Asset, 10: coin10Asset, 20: coin20Asset }
+  };
+  const productPool = [
+    { name: 'Soap', icon: '🧼', price: 25 }, { name: 'Biscuits', icon: '🍪', price: 20 },
+    { name: 'Milk', icon: '🥛', price: 30 }, { name: 'Rice', icon: '🍚', price: 100 },
+    { name: 'Towel', icon: '🧺', price: 60 }, { name: 'Cooking Oil', icon: '🫗', price: 80 },
+    { name: 'Notebook', icon: '📒', price: 45 }, { name: 'Shampoo', icon: '🧴', price: 55 }
+  ];
+  const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
+  const unique = (items) => [...new Set(items)];
+  const createSortingQuestion = (harder, questionIndex) => {
+    const denominations = harder ? [10, 20, 50, 100] : [10, 20, 50];
+    const denominationCount = harder ? 3 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 2);
+    const jarOrder = shuffle(denominations).slice(0, denominationCount);
+    const itemCount = harder ? 6 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3);
+    const counts = jarOrder.map(() => 1);
+    let remainingItems = itemCount - denominationCount;
+    while (remainingItems > 0) {
+      const eligibleIndexes = counts
+        .map((count, index) => ({ count, index }))
+        .filter(({ count, index }) => count < 3 && index !== 0);
+      const selected = randomItem(eligibleIndexes.length > 0 ? eligibleIndexes : counts.map((count, index) => ({ count, index })).filter(({ count }) => count < 3));
+      counts[selected.index] += 1;
+      remainingItems -= 1;
+    }
+    const values = jarOrder.flatMap((value, index) => Array.from({ length: counts[index] }, () => value));
+    const items = shuffle(values).map((value, index) => ({
+      id: `${questionIndex}-${value}-${index}`,
+      value,
+      kind: value >= 50 ? 'Note' : (index + questionIndex) % 2 === 1 ? 'Coin' : 'Note',
+      jar: value,
+      rotation: randomItem([-3, -1, 1, 2])
+    }));
+    return { items, jarOrder };
+  };
+  const createSortingSession = (harder) => {
+    return { questions: Array.from({ length: 3 }, (_, index) => createSortingQuestion(harder, index)) };
+  };
+  const createShoppingQuestion = () => {
+    const affordable = randomItem(productPool.filter(item => item.price <= 45));
+    const amount = affordable.price + randomItem([0, 5, 10]);
+    const unaffordable = shuffle(productPool.filter(item => item.price > amount)).slice(0, 3);
+    return { amount, items: shuffle([affordable, ...unaffordable]) };
+  };
+  const createShoppingSession = () => Array.from({ length: 3 }, createShoppingQuestion);
+  const createCalculationQuestion = () => {
+    const count = 2 + Math.floor(Math.random() * 4);
+    const values = [];
+    const denominations = [2, 5, 10, 20, 50];
+    while (values.length < count) values.push(randomItem(denominations));
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const answers = unique([total, total + 5, total + 10, Math.max(1, total - 5)]);
+    return { values: shuffle(values), answers: shuffle(answers) };
+  };
+  const createCalculationSession = () => Array.from({ length: 3 }, createCalculationQuestion);
+  const [sortingSession] = useState(() => createSortingSession(level === 2));
+  const [shoppingSession] = useState(createShoppingSession);
+  const [calculationSession] = useState(createCalculationSession);
+  const currentSortingQuestion = sortingSession.questions[sortingQuestionIndex];
+  const currentJar = currentSortingQuestion.jarOrder[sortingJarIndex];
+  const currentItems = currentSortingQuestion.items.filter(item => !sortedItems.includes(item.id));
+  const currentTargetItems = currentSortingQuestion.items.filter(item => item.jar === currentJar);
+  const currentShoppingQuestion = shoppingSession[questionStep];
+  const currentCalculationQuestion = calculationSession[questionStep];
+  const completeGame = () => {
+    processTelemetry('MoneyMatch', 1000, mistakes, (Date.now() - startTime) / 1000);
+    setWon(true);
+  };
+  const markMistake = (message) => {
+    setMistakes(current => current + 1);
+    setFeedback(message);
+  };
+  const placeMoney = (itemId) => {
+    if (sortingTransitioning) return;
+    const item = currentSortingQuestion.items.find(entry => entry.id === itemId);
+    if (!item || sortedItems.includes(itemId)) return;
+    if (item.jar !== currentJar) {
+      markMistake('That item belongs to another jar. Try again.');
+      return;
+    }
+    const nextSortedItems = [...sortedItems, itemId];
+    setSortedItems(nextSortedItems);
+    setSelectedMoney(null);
+    setFeedback('Correct. Money added to the jar.');
+    if (currentTargetItems.every(entry => nextSortedItems.includes(entry.id))) {
+      setSortingTransitioning(true);
+      setFeedback('Great work! The jar is full.');
+      window.setTimeout(() => {
+        if (sortingJarIndex + 1 < currentSortingQuestion.jarOrder.length) {
+          setSortingJarIndex(index => index + 1);
+          setSelectedMoney(null);
+          setJarHovered(false);
+          setSortingTransitioning(false);
+          setFeedback('The next money jar is ready.');
+        } else if (sortingQuestionIndex + 1 === sortingSession.questions.length) {
+          completeGame();
+        }
+        else {
+          setSortingQuestionIndex(index => index + 1);
+          setSortingJarIndex(0);
+          setSortedItems([]);
+          setSelectedMoney(null);
+          setJarHovered(false);
+          setSortingTransitioning(false);
+          setFeedback('The next money jar is ready.');
+        }
+      }, 650);
     }
   };
-
-  return (
-    <PageContainer title="Money Match" level={level}>
-      {!won ? (
-        <div className="text-center w-full">
-          <div className="text-8xl mb-6">🍎</div>
-          <p className="text-2xl font-bold mb-8 text-slate-700">
-            {level === 3 ? `You have ₹${have}. The apple costs ₹${price}. How much change should you get?` : `The apple costs ₹${price}. Pay the correct amount.`}
-          </p>
-          <div className="flex flex-col gap-4">
-            {options.map((opt, i) => (
-              <button key={i} onClick={() => handleSelect(opt.val)} className="p-5 bg-white rounded-xl shadow text-xl font-bold border-2 border-transparent hover:border-emerald-500">{opt.label}</button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="text-center mt-10">
-          <div className="text-8xl mb-8">🎉</div>
-          <button onClick={onBack} className="bg-emerald-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
-        </div>
-      )}
-    </PageContainer>
+  const handleMoneyClick = (itemId) => {
+    if (sortingTransitioning) return;
+    setSelectedMoney(current => current === itemId ? null : itemId);
+    setFeedback('Now tap the money jar.');
+  };
+  const handleShoppingChoice = (item) => {
+    setSelectedChoice(item.name);
+    if (item.price > currentShoppingQuestion.amount) {
+      markMistake('That item costs too much. Try another item.');
+      return;
+    }
+    if (questionStep === 2) completeGame();
+    else {
+      setQuestionStep(step => step + 1);
+      setSelectedChoice(null);
+      setFeedback('Correct. Here is the next question.');
+    }
+  };
+  const handleCalculationChoice = (answer) => {
+    setSelectedChoice(answer);
+    const correctTotal = currentCalculationQuestion.values.reduce((sum, value) => sum + value, 0);
+    if (answer !== correctTotal) {
+      markMistake('That is not the total. Try again.');
+      return;
+    }
+    if (questionStep === 2) completeGame();
+    else {
+      setQuestionStep(step => step + 1);
+      setSelectedChoice(null);
+      setFeedback('Correct. Here is the next question.');
+    }
+  };
+  const renderCurrency = (item, compact = false) => {
+    const asset = currencyAssets[item.kind]?.[item.value];
+    const className = item.kind === 'Coin'
+      ? compact ? 'h-11 w-11' : 'h-20 w-20'
+      : compact ? 'h-9 w-[4.5rem]' : 'h-16 w-32';
+    const fallbackClass = item.kind === 'Coin'
+      ? `flex ${compact ? 'h-11 w-11' : 'h-20 w-20'} items-center justify-center rounded-full border-4 border-amber-700 bg-gradient-to-br from-yellow-100 via-amber-300 to-amber-700 shadow-[inset_-5px_-5px_0_rgba(80,50,10,0.22),2px_4px_3px_rgba(70,50,30,0.22)]`
+      : `flex ${compact ? 'h-9 w-[4.5rem]' : 'h-16 w-32'} items-center justify-center rounded-lg border-2 border-amber-700 bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-300 shadow-[2px_4px_3px_rgba(70,50,30,0.22)]`;
+    return <span className="relative inline-flex select-none" aria-label={`Indian rupee ${item.value} ${item.kind.toLowerCase()}`}><img src={asset} alt="" aria-hidden="true" draggable="false" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.nextElementSibling.hidden = false; }} className={`${className} object-contain drop-shadow-[2px_4px_3px_rgba(70,50,30,0.22)]`} /><span hidden className={`${fallbackClass} text-lg font-black text-amber-950`}>₹{item.value}</span></span>;
+  };
+  const renderSortingItem = (item) => (
+    <button
+      key={item.id}
+      draggable
+      onClick={() => handleMoneyClick(item.id)}
+      onDragStart={(event) => event.dataTransfer.setData('moneyId', item.id)}
+      className={`group flex min-h-24 items-center justify-center rounded-xl border border-stone-200/70 bg-white/45 p-1.5 shadow-[0_6px_14px_rgba(87,67,43,0.06)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_12px_22px_rgba(87,67,43,0.14)] active:scale-95 ${selectedMoney === item.id ? 'ring-4 ring-emerald-500' : ''}`}
+    >
+      <span className="flex flex-col items-center gap-1"><span style={{ transform: `rotate(${item.rotation}deg)` }} className="transition-transform group-hover:scale-105">{renderCurrency(item)}</span><span className="text-xs font-bold text-slate-500">Indian {item.kind}</span></span>
+    </button>
   );
+  const renderJar = () => (
+    <div
+      onClick={() => selectedMoney && placeMoney(selectedMoney)}
+      onDragEnter={(event) => { event.preventDefault(); setJarHovered(true); }}
+      onDragLeave={() => setJarHovered(false)}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => { event.preventDefault(); placeMoney(event.dataTransfer.getData('moneyId')); }}
+      className={`relative mx-auto h-52 w-44 cursor-pointer overflow-hidden rounded-[38%_38%_24%_24%] border-4 border-amber-800/65 bg-gradient-to-br from-white/85 via-amber-100/45 to-amber-300/65 shadow-[inset_12px_8px_20px_rgba(255,255,255,0.9),inset_-14px_-18px_24px_rgba(120,70,20,0.2),0_12px_18px_rgba(80,50,20,0.22)] transition-all duration-200 ${jarHovered ? 'scale-[1.04] brightness-110 ring-4 ring-emerald-400/70' : 'hover:scale-[1.02]'} ${sortingTransitioning ? 'ring-4 ring-emerald-400/80 brightness-110' : ''}`}
+    >
+      <div className="absolute -top-5 left-8 right-8 z-30 h-10 rounded-[45%] border-4 border-amber-900/70 bg-gradient-to-b from-amber-100 to-amber-300 shadow-[inset_0_-5px_0_rgba(100,60,20,0.18),0_4px_0_rgba(100,60,20,0.2)]" />
+      <div className="absolute left-12 right-12 top-1 z-30 h-2 rounded-full bg-white/80" />
+      <div className="absolute inset-x-5 top-12 h-24 rounded-[45%] border border-white/35 bg-white/15 shadow-[inset_0_7px_8px_rgba(255,255,255,0.35)]" />
+      <div className="absolute left-4 top-10 z-20 h-32 w-3 rounded-full bg-white/80 blur-[1px]" />
+      <div className="absolute bottom-3 left-4 right-4 z-10 flex min-h-16 flex-wrap items-end justify-center gap-1 rounded-[45%] bg-amber-900/10 px-2 pb-1 pt-3">{currentSortingQuestion.items.filter(item => item.jar === currentJar && sortedItems.includes(item.id)).map(item => <span key={item.id} style={{ transform: `rotate(${item.rotation}deg)` }}>{renderCurrency(item, true)}</span>)}{!sortedItems.some(itemId => currentSortingQuestion.items.find(item => item.id === itemId)?.jar === currentJar) && <span className="text-xs font-bold text-amber-900/55">Drop money here</span>}</div>
+      <div className="absolute inset-x-5 top-16 z-30 rounded-xl border border-amber-800/20 bg-[#fff7df]/75 px-2 py-2 text-center shadow-[0_4px_8px_rgba(100,60,20,0.12),inset_0_2px_0_rgba(255,255,255,0.9)]"><div className="text-[10px] font-black tracking-[0.2em] text-amber-950">SORT INTO</div><div className="text-4xl font-black text-amber-950">₹{currentJar}</div></div>
+      <div className="absolute bottom-0 left-1/2 z-30 h-2 w-24 -translate-x-1/2 rounded-full bg-amber-900/30" />
+    </div>
+  );
+  const renderSorting = () => (
+    <div className="w-full">
+      <div className="mb-4 border-b border-stone-200/80 pb-3"><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Money Sorting</p><p className="text-lg font-black text-stone-800">Match the money to the jar</p></div>
+      <div className="grid items-center gap-4 md:grid-cols-[0.86fr_1.14fr]"><div className="flex min-h-[17rem] items-center justify-center rounded-3xl bg-amber-50/70 p-3 text-center">{renderJar()}</div><div className="rounded-[1.5rem] border border-stone-200/80 bg-white/70 p-3 shadow-[0_10px_24px_rgba(87,67,43,0.06)]"><div className="mb-3 flex items-center justify-between"><h3 className="text-base font-black text-stone-800">Money to Sort</h3><span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-bold text-stone-500">{currentItems.length} pieces</span></div><div className="grid grid-cols-2 gap-2">{currentItems.map(renderSortingItem)}</div></div></div>
+    </div>
+  );
+  const renderShopping = () => (
+    <div className="w-full"><div className="mb-5 text-center"><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Everyday choice</p><h3 className="mt-1 text-2xl font-black text-stone-800">What can I buy?</h3></div><div className="mx-auto mb-6 flex max-w-sm items-center justify-between rounded-[1.5rem] border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-100 px-6 py-4 shadow-[0_8px_20px_rgba(114,75,31,0.08)]"><span className="text-base font-bold text-amber-900">You have</span><span className="text-4xl font-black text-amber-950">₹{currentShoppingQuestion.amount}</span></div><div className="grid gap-3 sm:grid-cols-2">{currentShoppingQuestion.items.map(item => <button key={item.name} onClick={() => handleShoppingChoice(item)} className={`min-h-28 rounded-2xl border p-4 text-left shadow-[0_8px_18px_rgba(87,67,43,0.07)] transition-all hover:-translate-y-0.5 ${selectedChoice === item.name ? 'border-amber-500 bg-amber-50' : 'border-stone-200/80 bg-white/85'}`}><span className="mb-2 block text-4xl">{item.icon}</span><span className="block text-lg font-black text-stone-800">{item.name}</span><span className="mt-1 block text-lg font-black text-amber-700">₹{item.price}</span></button>)}</div></div>
+  );
+  const renderCalculation = () => (
+    <div className="w-full"><div className="mb-5 text-center"><p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Count the money</p><h3 className="mt-1 text-2xl font-black text-stone-800">How much money is there?</h3></div><div className="mb-6 rounded-[1.5rem] border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-100 p-6 shadow-[inset_0_2px_0_rgba(255,255,255,0.8),0_10px_22px_rgba(114,75,31,0.08)]"><div className="flex min-h-24 flex-wrap items-center justify-center gap-4">{currentCalculationQuestion.values.map((value, index) => <span key={`${value}-${index}`} className="rotate-[var(--money-tilt)]" style={{'--money-tilt': `${index % 2 === 0 ? -2 : 2}deg`}}>{renderCurrency({ value, kind: value >= 50 ? 'Note' : 'Coin' })}</span>)}</div></div><div className="grid grid-cols-2 gap-3">{currentCalculationQuestion.answers.map(answer => <button key={answer} onClick={() => handleCalculationChoice(answer)} className={`rounded-2xl border p-5 text-2xl font-black shadow-[0_8px_18px_rgba(87,67,43,0.07)] transition-all hover:-translate-y-0.5 ${selectedChoice === answer ? 'border-amber-500 bg-amber-50' : 'border-stone-200/80 bg-white/85'}`}>₹{answer}</button>)}</div></div>
+  );
+  return <PageContainer title="Money Match" level={level}><div className="mx-auto w-full max-w-3xl rounded-[2rem] border border-stone-200/80 bg-[#fffaf1]/90 p-4 shadow-[0_18px_40px_rgba(87,67,43,0.1)] sm:p-6"><div className="mb-5 flex items-center justify-between"><button onClick={onBack} className="rounded-xl px-2 py-2 text-sm font-black text-stone-600 transition-colors hover:bg-stone-100">← Back</button><div className="text-center"><p className="text-xs font-black uppercase tracking-[0.18em] text-amber-700">Cognitive Game</p><p className="text-sm font-black text-stone-700">Level {level}</p><p className="text-xs font-bold text-stone-500">{level <= 2 ? 'Money Sorting' : level === 3 ? 'What Can I Buy?' : 'Count the Money'}</p></div><span className="w-14" /></div>{!won ? <><>{level <= 2 && renderSorting()}</>{level === 3 && renderShopping()}{level === 4 && renderCalculation()}<div className={`min-h-8 pt-4 text-center text-sm font-black ${feedback.includes('too much') || feedback.includes('another') || feedback.includes('not the') ? 'text-orange-700' : 'text-emerald-700'}`} aria-live="polite">{feedback}</div></> : <div className="py-12 text-center"><div className="mb-5 text-7xl">🎉</div><p className="mb-2 text-2xl font-black text-emerald-700">Level Complete!</p><p className="mb-6 text-sm font-bold text-stone-500">Great job!</p><button onClick={onBack} className="rounded-xl bg-emerald-600 px-8 py-4 text-xl font-bold text-white shadow-lg shadow-emerald-900/10">Back to Suite</button></div>}</div></PageContainer>;
 };
 
 // 4. MEMORY TRAY
 const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
   const [phase, setPhase] = useState('observe');
   const [startTime] = useState(Date.now());
-  const items = ['🍎', '🔑', '💊', '🥛', '📱', '👓', '🖊️', '⌚'];
+  const allItems = ['💊', '👟', '👓', '📱', '🔑', '⌚', '🥛', '🍎', '🖊️', '💍', '📚', '✂️', '☂️', '☕', '🎧', '📸'];
   const [tray, setTray] = useState([]);
-  const [missingItem, setMissingItem] = useState('');
-  const [target, setTarget] = useState('');
-  const [options, setOptions] = useState([]);
-  const [qType, setQType] = useState('missing');
-
+  const [distractors, setDistractors] = useState([]);
+  const [optionsGrid, setOptionsGrid] = useState([]);
+  const [selectedItems, setSelectedItems] = useState([]);
+  
   useEffect(() => {
-    const count = level === 1 ? 4 : level === 2 ? 6 : 8;
-    const selectedTray = shuffle(items).slice(0, count);
+    // Determine how many items to memorize based on AI Level
+    const targetCount = level === 1 ? 4 : level === 2 ? 6 : 8;
+    // We want a bigger pool to choose from for the question phase
+    const gridCount = level === 1 ? 8 : level === 2 ? 12 : 16;
+    
+    const shuffledItems = shuffle([...allItems]);
+    const selectedTray = shuffledItems.slice(0, targetCount);
+    const distractorItems = shuffledItems.slice(targetCount, gridCount);
+    
     setTray(selectedTray);
+    setDistractors(distractorItems);
     
-    const missing = items.find(i => !selectedTray.includes(i)) || '🧦';
-    setMissingItem(missing);
+    // Grid shown during question phase = target items + distractors, shuffled
+    setOptionsGrid(shuffle([...selectedTray, ...distractorItems]));
     
-    const tgt = selectedTray[Math.floor(Math.random() * selectedTray.length)];
-    setTarget(tgt);
-    
-    const type = level > 1 ? (Math.random() > 0.5 ? 'missing' : 'position') : 'present';
-    setQType(type);
-
-    if (type === 'present' || type === 'missing') {
-       let opts = shuffle([tgt, missing, '👟']);
-       setOptions(opts);
-    }
-    
-    setTimeout(() => setPhase('question'), level === 1 ? 5000 : level === 2 ? 4000 : 3000);
+    // Give them time to memorize based on level
+    const observeTime = level === 1 ? 6000 : level === 2 ? 5000 : 4000;
+    setTimeout(() => setPhase('question'), observeTime);
   }, [level]);
 
-  const handleGuess = (val) => {
-    let isCorrect = false;
-    if (qType === 'present') isCorrect = val === target;
-    if (qType === 'missing') isCorrect = val === missingItem;
-    if (qType === 'position') isCorrect = val === tray.indexOf(target);
-
-    if (isCorrect) {
-      processTelemetry('MemoryTray', 1000, 0, (Date.now() - startTime)/1000);
-      setPhase('result');
+  const toggleSelection = (item) => {
+    if (selectedItems.includes(item)) {
+      setSelectedItems(selectedItems.filter(i => i !== item));
     } else {
-      processTelemetry('MemoryTray', 1000, 1, (Date.now() - startTime)/1000);
+      setSelectedItems([...selectedItems, item]);
     }
+  };
+
+  const submitAnswers = () => {
+    // Calculate accuracy and points
+    let correctCount = 0;
+    let falsePositives = 0;
+    
+    selectedItems.forEach(item => {
+      if (tray.includes(item)) correctCount++;
+      else falsePositives++;
+    });
+    
+    const missedCount = tray.length - correctCount;
+    const totalErrors = falsePositives + missedCount;
+    
+    // Send telemetry to update decision tree
+    // If they got all correct and no false positives, errors = 0
+    processTelemetry('MemoryTray', 1000, totalErrors, (Date.now() - startTime)/1000);
+    
+    setPhase('result');
   };
 
   return (
     <PageContainer title="Memory Tray" level={level}>
       {phase === 'observe' && (
-        <div className="bg-amber-100 p-8 rounded-3xl border-4 border-amber-900 grid grid-cols-2 gap-6 w-full shadow-lg">
-          {tray.map((it, i) => <div key={i} className="text-6xl flex justify-center">{it}</div>)}
+        <div className="flex flex-col items-center w-full animate-fade-in">
+          <p className="text-center font-bold text-slate-600 mb-6 text-lg">Memorize all the objects on the tray!</p>
+          <div className="bg-amber-100 p-8 rounded-3xl border-4 border-amber-800 grid grid-cols-2 md:grid-cols-3 gap-6 w-full shadow-xl">
+            {tray.map((it, i) => <div key={i} className="text-6xl flex justify-center animate-bounce-in" style={{animationDelay: `${i*0.1}s`}}>{it}</div>)}
+          </div>
         </div>
       )}
+      
       {phase === 'question' && (
-        <div className="text-center w-full">
-          {qType === 'present' && <p className="text-2xl font-bold mb-8 text-amber-900">Which object was on the tray?</p>}
-          {qType === 'missing' && <p className="text-2xl font-bold mb-8 text-amber-900">Which object was NOT on the tray?</p>}
-          {qType === 'position' && <p className="text-2xl font-bold mb-8 text-amber-900">Where was the {target}?</p>}
+        <div className="flex flex-col items-center w-full animate-fade-in">
+          <p className="text-center font-bold text-amber-900 mb-2 text-xl">What was on the tray?</p>
+          <p className="text-center font-medium text-slate-500 mb-6 text-sm">Select all the objects you remember seeing.</p>
           
-          {(qType === 'present' || qType === 'missing') ? (
-            <div className="flex gap-4 justify-center">
-              {options.map((opt, i) => (
-                <button key={i} onClick={() => handleGuess(opt)} className="text-6xl p-6 bg-white rounded-2xl shadow-lg hover:bg-emerald-100 border-2 hover:border-emerald-500 w-32 h-32 flex justify-center items-center">{opt}</button>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-4 w-full">
-              {tray.map((_, i) => (
-                 <button key={i} onClick={() => handleGuess(i)} className="text-3xl bg-white p-4 rounded-xl shadow hover:bg-emerald-100 h-24 flex justify-center items-center font-bold text-slate-300">Pos {i+1}</button>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-3 md:grid-cols-4 gap-3 w-full mb-8">
+            {optionsGrid.map((opt, i) => {
+              const isSelected = selectedItems.includes(opt);
+              return (
+                <button 
+                  key={i} 
+                  onClick={() => toggleSelection(opt)} 
+                  className={`text-5xl p-4 rounded-2xl shadow-sm transition-all border-4 flex justify-center items-center h-24 ${
+                    isSelected ? 'bg-amber-100 border-amber-600 scale-105' : 'bg-white border-transparent hover:border-amber-200'
+                  }`}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+          
+          <button 
+            onClick={submitAnswers}
+            disabled={selectedItems.length === 0}
+            className="w-full bg-emerald-600 disabled:bg-slate-300 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-xl"
+          >
+            Submit Answers
+          </button>
         </div>
       )}
+
       {phase === 'result' && (
-        <div className="text-center mt-10">
-          <div className="text-8xl mb-8">🏆</div>
-          <button onClick={onBack} className="bg-emerald-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
+        <div className="text-center w-full flex flex-col items-center animate-bounce-in">
+          {(() => {
+            const correctCount = selectedItems.filter(i => tray.includes(i)).length;
+            const missedCount = tray.length - correctCount;
+            const falsePositives = selectedItems.filter(i => !tray.includes(i)).length;
+            const isPerfect = missedCount === 0 && falsePositives === 0;
+            
+            return (
+              <>
+                <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-4 ${isPerfect ? 'bg-emerald-100' : 'bg-amber-100'}`}>
+                   {isPerfect ? <CheckCircle2 className="w-16 h-16 text-emerald-600" /> : <Brain className="w-16 h-16 text-amber-600" />}
+                </div>
+                <h2 className={`text-3xl font-black mb-2 ${isPerfect ? 'text-emerald-800' : 'text-amber-800'}`}>
+                  {isPerfect ? 'Perfect Memory!' : 'Good Effort!'}
+                </h2>
+                
+                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 w-full mt-4 flex flex-col gap-3">
+                  <div className="flex justify-between items-center text-lg">
+                    <span className="font-bold text-slate-600">Objects Found:</span>
+                    <span className="font-black text-emerald-600">{correctCount} / {tray.length}</span>
+                  </div>
+                  {missedCount > 0 && (
+                    <div className="flex justify-between items-center text-lg">
+                      <span className="font-bold text-slate-600">Missed Objects:</span>
+                      <span className="font-black text-red-500">{missedCount}</span>
+                    </div>
+                  )}
+                  {falsePositives > 0 && (
+                    <div className="flex justify-between items-center text-lg">
+                      <span className="font-bold text-slate-600">Extra (Wrong):</span>
+                      <span className="font-black text-orange-500">{falsePositives}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+          <button onClick={onBack} className="mt-8 bg-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg active:scale-95 transition-all w-full">Back to Suite</button>
         </div>
       )}
     </PageContainer>
   );
 };
 
-// 5. CREATIVE CALM
+// 5. CREATIVE CALM (Sandbox Coloring)
 const CreativeCalmGame = ({ onBack, level, processTelemetry }) => {
-  const [phase, setPhase] = useState(level > 1 ? 'observe' : 'color');
-  const [regions, setRegions] = useState({a: '#F3F4F6', b: '#F3F4F6', c: '#F3F4F6'});
-  const [won, setWon] = useState(false);
+  const [activeColor, setActiveColor] = useState('rgba(239, 68, 68, 0.5)'); // Semi-transparent
   const [startTime] = useState(Date.now());
+  const canvasRef = React.useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
   
-  const colors = ['#EF4444', '#3B82F6', '#EAB308', '#22C55E'];
-  const targetColors = {a: '#3B82F6', b: '#EF4444', c: '#EAB308'}; // Fixed memory target
+  const palette = [
+    'rgba(239, 68, 68, 0.5)', 'rgba(249, 115, 22, 0.5)', 'rgba(245, 158, 11, 0.5)', 'rgba(234, 179, 8, 0.5)', 
+    'rgba(132, 204, 22, 0.5)', 'rgba(34, 197, 94, 0.5)', 'rgba(6, 182, 212, 0.5)', 'rgba(59, 130, 246, 0.5)', 
+    'rgba(99, 102, 241, 0.5)', 'rgba(168, 85, 247, 0.5)', 'rgba(236, 72, 153, 0.5)', 'rgba(244, 63, 94, 0.5)'
+  ];
 
-  useEffect(() => {
-    if (level > 1) {
-      setTimeout(() => setPhase('color'), 4000);
-    }
-  }, [level]);
+  const handleFinish = () => {
+    processTelemetry('CreativeCalm', 1000, 0, (Date.now() - startTime)/1000);
+    onBack();
+  };
 
-  const colorIt = (key) => {
-    if (phase !== 'color') return;
-    const c = colors[Math.floor(Math.random() * colors.length)];
-    const newReg = {...regions, [key]: c};
-    setRegions(newReg);
+  const startDrawing = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
     
-    if (!Object.values(newReg).includes('#F3F4F6')) {
-      if (level > 1) {
-        // Memory check
-        if (newReg.a === targetColors.a && newReg.b === targetColors.b && newReg.c === targetColors.c) {
-           processTelemetry('CreativeCalm', 1000, 0, (Date.now() - startTime)/1000);
-           setWon(true);
-        } else {
-           processTelemetry('CreativeCalm', 1000, 1, (Date.now() - startTime)/1000);
-           setRegions({a: '#F3F4F6', b: '#F3F4F6', c: '#F3F4F6'}); // reset
-        }
-      } else {
-        processTelemetry('CreativeCalm', 1000, 0, (Date.now() - startTime)/1000);
-        setWon(true);
-      }
-    }
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing) return;
+    e.preventDefault(); // Prevent scrolling while drawing
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = activeColor;
+    ctx.lineWidth = 15;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
   };
 
   return (
     <PageContainer title="Creative Calm" level={level}>
-      {!won ? (
-        <div className="w-full flex flex-col justify-center items-center flex-1 bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
-          {phase === 'observe' && <p className="font-bold text-lg mb-4 text-purple-800">Memorize the colors!</p>}
-          {phase === 'color' && level > 1 && <p className="font-bold text-lg mb-4 text-purple-800">Reproduce the colors!</p>}
+      <div className="w-full flex flex-col justify-between items-center flex-1 bg-white rounded-3xl p-4 md:p-6 shadow-sm border border-slate-200 animate-fade-in">
+        <div className="text-center mb-2">
+          <p className="font-bold text-xl text-pink-700">Relax & Color</p>
+          <p className="text-sm text-slate-500 font-medium">Use your finger to paint the drawing!</p>
+        </div>
+        
+        {/* Canvas Area */}
+        <div className="flex-1 w-full max-w-[320px] flex items-center justify-center relative my-4 bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-inner">
+          <img 
+            src="/image/Printable-Spring-Coloring-Pages.png" 
+            alt="Coloring Page" 
+            className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none opacity-80"
+          />
+          <canvas 
+            ref={canvasRef}
+            width={320}
+            height={320}
+            className="w-full h-full object-contain z-10 touch-none"
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+            onTouchStart={startDrawing}
+            onTouchMove={draw}
+            onTouchEnd={stopDrawing}
+          />
+        </div>
+        
+        {/* Color Palette */}
+        <div className="w-full mt-auto">
+          <p className="text-center text-slate-400 font-bold text-xs uppercase tracking-widest mb-3">Choose a Color</p>
+          <div className="grid grid-cols-6 gap-2 justify-center mb-6">
+            {palette.map((c) => (
+              <button 
+                key={c} 
+                onClick={() => setActiveColor(c)}
+                className={`w-10 h-10 rounded-full shadow-sm transition-all transform hover:scale-110 ${activeColor === c ? 'ring-4 ring-offset-2 ring-slate-800 scale-110' : 'ring-1 ring-slate-200'}`}
+                style={{ backgroundColor: c.replace('0.5', '1') }}
+              />
+            ))}
+          </div>
           
-          <svg width="250" height="250" viewBox="0 0 100 100" className="drop-shadow-md">
-             <path d="M50 10 Q 80 10 80 50 Q 80 90 50 90 Q 20 90 20 50 Q 20 10 50 10 Z" 
-               fill={phase === 'observe' ? targetColors.a : regions.a} 
-               onClick={() => colorIt('a')} stroke="#1F2937" strokeWidth="2"/>
-             <circle cx="50" cy="50" r="20" 
-               fill={phase === 'observe' ? targetColors.b : regions.b} 
-               onClick={() => colorIt('b')} stroke="#1F2937" strokeWidth="2"/>
-             <circle cx="50" cy="50" r="10" 
-               fill={phase === 'observe' ? targetColors.c : regions.c} 
-               onClick={() => colorIt('c')} stroke="#1F2937" strokeWidth="2"/>
-          </svg>
+          <button onClick={handleFinish} className="w-full bg-pink-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-xl flex items-center justify-center gap-2">
+            <CheckCircle2 className="w-6 h-6" /> I'm Done
+          </button>
         </div>
-      ) : (
-        <div className="text-center mt-10">
-          <p className="text-2xl font-bold mb-8 text-purple-900">Beautiful artwork!</p>
-          <button onClick={onBack} className="bg-purple-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
-        </div>
-      )}
+      </div>
     </PageContainer>
   );
 };
@@ -547,163 +865,168 @@ const ExploreLearnGame = ({ onBack, level, processTelemetry }) => {
   );
 };
 
-// 8. FEED THE BIRD
-const FeedBirdGame = ({ onBack, level, processTelemetry }) => {
+// 8. FEED THE DOG
+const FeedDogGame = ({ onBack, level, processTelemetry }) => {
   const [phase, setPhase] = useState('observe');
   const [startTime] = useState(Date.now());
-  const [targetBird, setTargetBird] = useState(null);
+  const [targetItem, setTargetItem] = useState(null);
   
-  const pairings = [
-    { bird: '🐦', food: '🍓' },
-    { bird: '🦜', food: '🥜' },
-    { bird: '🦆', food: '🍞' },
-    { bird: '🦚', food: '🪱' }
+  const options = [
+    { emoji: '🦴', name: 'Bone' },
+    { emoji: '🥩', name: 'Meat' },
+    { emoji: '🥫', name: 'Dog Food' },
+    { emoji: '🎾', name: 'Ball' }
   ];
-  const [currentPairs, setCurrentPairs] = useState([]);
+  const [currentOptions, setCurrentOptions] = useState([]);
 
   useEffect(() => {
-    const count = level === 1 ? 1 : level === 2 ? 2 : 3;
-    const pairs = shuffle(pairings).slice(0, count);
-    setCurrentPairs(pairs);
-    setTargetBird(pairs[Math.floor(Math.random() * pairs.length)]);
-    
-    if(level > 1) {
-      setTimeout(() => setPhase('question'), 4000);
-    } else {
-      setPhase('question');
-    }
+    const count = level === 1 ? 2 : level === 2 ? 3 : 4;
+    const shuffled = [...options].sort(() => 0.5 - Math.random());
+    const selectedOptions = shuffled.slice(0, count);
+    setCurrentOptions(selectedOptions);
+    setTargetItem(selectedOptions[Math.floor(Math.random() * selectedOptions.length)]);
+    setPhase('question');
   }, [level]);
 
   const handleSelect = (val) => {
-    if (val === targetBird.food) {
-      processTelemetry('FeedBird', 1000, 0, (Date.now() - startTime)/1000);
+    if (val === targetItem.name) {
+      processTelemetry('FeedDog', 1000, 0, (Date.now() - startTime)/1000);
       setPhase('result');
     } else {
-      processTelemetry('FeedBird', 1000, 1, (Date.now() - startTime)/1000);
+      processTelemetry('FeedDog', 1000, 1, (Date.now() - startTime)/1000);
     }
   };
 
   return (
-    <PageContainer title="Feed the Bird" level={level}>
-      {phase === 'observe' && level > 1 && (
-        <div className="flex flex-col gap-6 w-full mt-4">
-           {currentPairs.map((p, i) => (
-             <div key={i} className="flex justify-between items-center bg-white p-6 rounded-2xl shadow">
-               <div className="text-6xl">{p.bird}</div>
-               <div className="text-4xl text-slate-300">→</div>
-               <div className="text-6xl">{p.food}</div>
-             </div>
-           ))}
-        </div>
-      )}
-      {phase === 'question' && targetBird && (
-        <div className="text-center w-full">
-          <div className="text-[120px] mb-8 animate-bounce">{targetBird.bird}</div>
-          <p className="font-bold text-2xl mb-8 text-red-900">What should this bird eat?</p>
-          <div className="flex gap-4 justify-center">
-            {shuffle(['🍓', '🥜', '🍞', '🪱']).map((f, i) => (
-               <button key={i} onClick={() => handleSelect(f)} className="text-6xl p-6 bg-white rounded-2xl shadow-lg hover:bg-red-100 border-2 hover:border-red-400 w-32 h-32 flex justify-center items-center">{f}</button>
+    <PageContainer title="Feed the Dog" level={level}>
+      {phase === 'question' && targetItem && (
+        <div className="text-center w-full mt-8">
+          <div className="text-[120px] mb-4 animate-bounce">🐶</div>
+          <div className="bg-blue-50 text-blue-900 font-bold p-4 rounded-xl mb-8 border border-blue-200 shadow-sm inline-block relative">
+            "I want my {targetItem.name}!"
+            <div className="absolute -top-3 left-1/2 w-4 h-4 bg-blue-50 border-t border-l border-blue-200 transform -translate-x-1/2 rotate-45"></div>
+          </div>
+          <div className="flex flex-wrap justify-center gap-6">
+            {currentOptions.map((opt, i) => (
+              <button 
+                key={i} 
+                onClick={() => handleSelect(opt.name)}
+                className="text-7xl bg-white border border-slate-200 p-6 rounded-3xl shadow-sm hover:scale-110 hover:shadow-md transition-all active:scale-95"
+              >
+                {opt.emoji}
+              </button>
             ))}
           </div>
         </div>
       )}
       {phase === 'result' && (
-         <div className="text-center mt-10">
-           <div className="text-8xl mb-8">❤️</div>
-           <button onClick={onBack} className="bg-red-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
-         </div>
+        <div className="text-center w-full mt-10 animate-fade-in">
+          <div className="text-[140px] mb-4">🐕</div>
+          <p className="text-3xl font-black text-emerald-600 mb-8 tracking-tight">Happy Dog!</p>
+          <button onClick={onBack} className="w-full max-w-xs bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-xl">Continue</button>
+        </div>
       )}
     </PageContainer>
   );
 };
 
-// 9. FIND YOUR WAY HOME
+// 9. FIND HOME (Maze)
+const MAZES = {
+  1: [
+    ['S', '0', '1', '1', '1'],
+    ['1', '0', '0', '0', '1'],
+    ['1', '1', '1', '0', '1'],
+    ['1', '1', '1', '0', '0'],
+    ['1', '1', '1', '1', 'E']
+  ],
+  2: [
+    ['S', '1', '1', '1', '1'],
+    ['0', '0', '0', '1', '1'],
+    ['1', '1', '0', '0', '0'],
+    ['1', '1', '1', '1', '0'],
+    ['1', '1', '1', '1', 'E']
+  ],
+  3: [
+    ['S', '0', '0', '1', '1'],
+    ['1', '1', '0', '1', '1'],
+    ['1', '0', '0', '0', '1'],
+    ['1', '0', '1', '0', '1'],
+    ['1', '0', '0', '0', 'E']
+  ]
+};
+
 const FindHomeGame = ({ onBack, level, processTelemetry }) => {
-  const [phase, setPhase] = useState('observe');
+  const [pos, setPos] = useState({r: 0, c: 0});
+  const [maze, setMaze] = useState(MAZES[level] || MAZES[1]);
   const [startTime] = useState(Date.now());
-  const [path, setPath] = useState([]);
-  const [hiddenPath, setHiddenPath] = useState([]);
-  const [qType, setQType] = useState('next'); // next or route
+  const [errors, setErrors] = useState(0);
+  const [won, setWon] = useState(false);
   
   useEffect(() => {
-    const count = level === 1 ? 3 : level === 2 ? 5 : 7;
-    // ensure Start and Home are first and last
-    const middles = shuffle(['🌳 Park', '🏪 Shop', '🏥 Clinic', '🏫 School', '🛕 Temple']).slice(0, count - 2);
-    const p = ['👴 Start', ...middles, '🏠 Home'];
-    setPath(p);
-    
-    setHiddenPath(p.slice(0, level === 1 ? p.length : level === 2 ? 3 : 2));
-    setQType(level > 1 ? 'next' : 'route');
-
-    if (level >= 3) {
-      setTimeout(() => setPhase('question'), 4000);
-    } else {
-      setPhase('question');
-    }
+    setMaze(MAZES[level] || MAZES[1]);
+    setPos({r: 0, c: 0});
   }, [level]);
 
-  const targetAns = path[path.length - 2]; // what comes before home
-
-  const handleSelect = (val) => {
-    if (val === targetAns || val === '🏠 Home') {
-      processTelemetry('FindHome', 1000, 0, (Date.now() - startTime)/1000);
-      setPhase('result');
-    } else {
-      processTelemetry('FindHome', 1000, 1, (Date.now() - startTime)/1000);
+  const move = (dr, dc) => {
+    if (won) return;
+    const nr = pos.r + dr;
+    const nc = pos.c + dc;
+    
+    if (nr >= 0 && nr < 5 && nc >= 0 && nc < 5) {
+      const cell = maze[nr][nc];
+      if (cell === '1') {
+        setErrors(e => e + 1);
+      } else {
+        setPos({r: nr, c: nc});
+        if (cell === 'E') {
+          processTelemetry('FindHome', 1000, errors, (Date.now() - startTime)/1000);
+          setWon(true);
+        }
+      }
     }
   };
 
   return (
-    <PageContainer title="Find Your Way" level={level}>
-      {phase === 'observe' && (
-        <div className="flex flex-col gap-3 w-full">
-           <p className="font-bold text-cyan-900 text-center mb-2">Remember this route:</p>
-           {path.map((p, i) => (
-             <div key={i} className="font-bold text-lg bg-white p-4 rounded-xl shadow flex items-center gap-4">
-               <div className="w-8 h-8 rounded-full bg-cyan-100 text-cyan-800 flex items-center justify-center text-sm">{i+1}</div>
-               {p}
-             </div>
-           ))}
-        </div>
-      )}
-      {phase === 'question' && (
-        <div className="text-center w-full">
-          <p className="font-bold text-2xl mb-6 text-cyan-900">
-            {qType === 'next' ? 'What comes before Home?' : 'Which road leads home?'}
-          </p>
-          <div className="flex flex-col gap-3 mb-8">
-             {hiddenPath.map((p, i) => (
-               <div key={i} className="font-bold text-lg bg-white p-4 rounded-xl shadow opacity-60 flex items-center gap-4">
-                 <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-sm">{i+1}</div>
-                 {p}
-               </div>
-             ))}
-             {qType === 'next' && (
-               <>
-                 <div className="font-black text-2xl bg-cyan-50 text-cyan-600 p-4 rounded-xl border-2 border-dashed border-cyan-400 animate-pulse">?</div>
-                 <div className="font-bold text-lg bg-white p-4 rounded-xl shadow flex items-center gap-4">
-                     <div className="w-8 h-8 rounded-full bg-cyan-100 text-cyan-800 flex items-center justify-center text-sm">{path.length}</div>
-                     🏠 Home
-                 </div>
-               </>
-             )}
+    <PageContainer title="Find Way Home" level={level}>
+      {!won ? (
+        <div className="w-full flex flex-col items-center mt-4">
+          <p className="text-slate-500 font-bold mb-6 text-center">Help the person (🚶‍♂️) reach home (🏠)!</p>
+          
+          <div className="bg-white p-4 rounded-3xl shadow-lg border border-slate-200 mb-8">
+            {maze.map((row, r) => (
+              <div key={r} className="flex">
+                {row.map((cell, c) => {
+                  let bg = 'bg-slate-50';
+                  if (cell === '1') bg = 'bg-emerald-600'; // Hedge / Wall
+                  if (cell === 'E') bg = 'bg-blue-100';
+                  
+                  const isPlayer = pos.r === r && pos.c === c;
+                  
+                  return (
+                    <div key={c} className={`w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center border border-slate-100 text-3xl sm:text-4xl ${bg}`}>
+                      {isPlayer ? '🚶‍♂️' : (cell === 'E' ? '🏠' : '')}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
-          <div className="flex flex-wrap gap-4 justify-center">
-            {qType === 'next' ? (
-              shuffle([targetAns, '🌳 Park', '🏪 Shop']).map((opt, i) => (
-                <button key={i} onClick={() => handleSelect(opt)} className="p-4 bg-white rounded-xl shadow font-bold text-xl hover:bg-cyan-100 border-2 border-transparent hover:border-cyan-400">{opt}</button>
-              ))
-            ) : (
-              <button onClick={() => handleSelect('🏠 Home')} className="p-4 bg-cyan-600 text-white rounded-xl shadow font-bold text-xl hover:bg-cyan-700 w-full">Follow path to Home</button>
-            )}
+
+          <div className="grid grid-cols-3 gap-2 w-48">
+            <div></div>
+            <button onClick={() => move(-1, 0)} className="bg-slate-200 hover:bg-slate-300 p-4 rounded-xl shadow text-2xl active:scale-95 transition-all flex items-center justify-center">⬆️</button>
+            <div></div>
+            <button onClick={() => move(0, -1)} className="bg-slate-200 hover:bg-slate-300 p-4 rounded-xl shadow text-2xl active:scale-95 transition-all flex items-center justify-center">⬅️</button>
+            <button onClick={() => move(1, 0)} className="bg-slate-200 hover:bg-slate-300 p-4 rounded-xl shadow text-2xl active:scale-95 transition-all flex items-center justify-center">⬇️</button>
+            <button onClick={() => move(0, 1)} className="bg-slate-200 hover:bg-slate-300 p-4 rounded-xl shadow text-2xl active:scale-95 transition-all flex items-center justify-center">➡️</button>
           </div>
         </div>
-      )}
-      {phase === 'result' && (
-         <div className="text-center mt-10">
-           <div className="text-8xl mb-8">🏠</div>
-           <button onClick={onBack} className="bg-cyan-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
-         </div>
+      ) : (
+        <div className="text-center w-full mt-10 animate-fade-in">
+          <div className="text-[140px] mb-4">🏠</div>
+          <p className="text-3xl font-black text-cyan-600 mb-8 tracking-tight">Safe at Home!</p>
+          <button onClick={onBack} className="w-full max-w-xs bg-cyan-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-xl">Continue</button>
+        </div>
       )}
     </PageContainer>
   );
@@ -712,45 +1035,76 @@ const FindHomeGame = ({ onBack, level, processTelemetry }) => {
 // MASTER DASHBOARD & AI ROUTER
 export default function TherapySuite({ onNavigate, currentScreen, saveGameResult, currentUser }) {
   const [activeGame, setActiveGame] = useState(null); 
-  const [globalAiLevel, setGlobalAiLevel] = useState(currentUser?.dementia_level || 2);
+  
+  const defaultLevel = currentUser?.dementia_level || 2;
+  const [gameLevels, setGameLevels] = useState({
+    nature: defaultLevel,
+    routine: defaultLevel,
+    money: Math.min(4, defaultLevel),
+    tray: defaultLevel,
+    calm: defaultLevel,
+    sound: defaultLevel,
+    explore: defaultLevel,
+    bird: defaultLevel,
+    home: defaultLevel
+  });
+  
+  const [currentSong, setCurrentSong] = useState(null);
+
+  useEffect(() => {
+    if (activeGame) {
+      const songs = ['/songs/song1.mp3', '/songs/song2.mp4', '/songs/song3.mp4', '/songs/song4.mp4'];
+      const randomSong = songs[Math.floor(Math.random() * songs.length)];
+      setCurrentSong(randomSong);
+    } else {
+      setCurrentSong(null);
+    }
+  }, [activeGame]);
 
   const processTelemetry = async (gameName, latency, errors, completionSec) => {
-    console.log(`📡 Sending [${gameName}] Telemetry to AI...`);
+    console.log(`📡 Saving [${gameName}] Telemetry...`);
     await saveTelemetryLocal(gameName, latency, errors, completionSec, currentUser?.email);
 
-    try {
-      const response = await fetch('http://127.0.0.1:8008/api/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          latency_ms: latency,
-          error_count: errors,
-          completion_sec: completionSec,
-          baseline_stage: globalAiLevel
-        })
+    console.log("Using Edge AI logic.");
+    if (activeGame) {
+      setGameLevels(prev => {
+        let currentLevel = prev[activeGame];
+        let nextLevel = currentLevel;
+        if (errors >= 1 || latency > 4000) nextLevel = Math.max(1, currentLevel - 1); 
+        else if (errors === 0 && latency < 2000) {
+          const levelCap = activeGame === 'money' ? 4 : 3;
+          nextLevel = Math.min(levelCap, currentLevel + 1);
+        }
+        return { ...prev, [activeGame]: nextLevel };
       });
-      const data = await response.json();
-      setGlobalAiLevel(data.new_level);
-    } catch (err) {
-      console.warn("⚠️ API Offline. Using Edge AI Fallback logic.");
-      let nextLevel = globalAiLevel;
-      if (errors >= 1 || latency > 4000) nextLevel = Math.max(1, globalAiLevel - 1); 
-      else if (errors === 0 && latency < 2000) nextLevel = Math.min(3, globalAiLevel + 1); 
-      setGlobalAiLevel(nextLevel);
     }
   };
 
   const handleBack = () => setActiveGame(null);
 
-  if (activeGame === 'nature') return <NatureRecallGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'routine') return <DailyRoutineGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'money') return <MoneyMatchGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'tray') return <MemoryTrayGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'calm') return <CreativeCalmGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'sound') return <SoundGuessGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'explore') return <ExploreLearnGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'bird') return <FeedBirdGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
-  if (activeGame === 'home') return <FindHomeGame onBack={handleBack} level={globalAiLevel} processTelemetry={processTelemetry} />;
+  const renderGame = () => {
+    if (activeGame === 'nature') return <NatureRecallGame onBack={handleBack} level={gameLevels.nature} processTelemetry={processTelemetry} />;
+    if (activeGame === 'routine') return <DailyRoutineGame onBack={handleBack} level={gameLevels.routine} processTelemetry={processTelemetry} />;
+    if (activeGame === 'money') return <MoneyMatchGame onBack={handleBack} level={gameLevels.money} processTelemetry={processTelemetry} />;
+    if (activeGame === 'tray') return <MemoryTrayGame onBack={handleBack} level={gameLevels.tray} processTelemetry={processTelemetry} />;
+    if (activeGame === 'calm') return <CreativeCalmGame onBack={handleBack} level={gameLevels.calm} processTelemetry={processTelemetry} />;
+    if (activeGame === 'sound') return <SoundGuessGame onBack={handleBack} level={gameLevels.sound} processTelemetry={processTelemetry} />;
+    if (activeGame === 'explore') return <ExploreLearnGame onBack={handleBack} level={gameLevels.explore} processTelemetry={processTelemetry} />;
+    if (activeGame === 'bird') return <FeedDogGame onBack={handleBack} level={gameLevels.bird} processTelemetry={processTelemetry} />;
+    if (activeGame === 'home') return <FindHomeGame onBack={handleBack} level={gameLevels.home} processTelemetry={processTelemetry} />;
+    return null;
+  };
+
+  const gameElement = renderGame();
+
+  if (gameElement) {
+    return (
+      <>
+        {gameElement}
+        {currentSong && <audio src={currentSong} autoPlay loop />}
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] text-slate-800 flex justify-center items-start p-2 sm:p-4 select-none font-sans">
@@ -775,9 +1129,9 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
 
         <div className="flex-1 overflow-y-auto pb-24 [&::-webkit-scrollbar]:hidden p-5">
           
-          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-5 mb-6 text-center shadow-sm">
-             <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Current AI Target Level</span>
-             <div className="text-5xl font-black text-[#0A5C4A] mt-2 tracking-tighter">Level {globalAiLevel}</div>
+          <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4 mb-6 text-center shadow-sm">
+             <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Individual AI Difficulty Engine Active</span>
+             <p className="text-sm font-medium text-slate-400 mt-1">Each game now adapts to you individually!</p>
           </div>
 
           <h2 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4 ml-1">9-Game Cognitive Suite</h2>
@@ -785,47 +1139,56 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
           <div className="grid grid-cols-2 gap-3 mb-4">
             <button onClick={() => setActiveGame('nature')} className="bg-emerald-50 border border-emerald-100 p-5 rounded-3xl flex flex-col items-center hover:bg-emerald-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Leaf className="w-8 h-8 text-emerald-600" /></div>
-              <span className="font-bold text-emerald-900 text-[13px] text-center">Nature Recall</span>
+              <span className="font-bold text-emerald-900 text-[13px] text-center mb-2">Nature Recall</span>
+              <span className="text-[10px] bg-emerald-200 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.nature}</span>
             </button>
             
             <button onClick={() => setActiveGame('routine')} className="bg-blue-50 border border-blue-100 p-5 rounded-3xl flex flex-col items-center hover:bg-blue-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Layout className="w-8 h-8 text-blue-600" /></div>
-              <span className="font-bold text-blue-900 text-[13px] text-center">Daily Routine</span>
+              <span className="font-bold text-blue-900 text-[13px] text-center mb-2">Daily Routine</span>
+              <span className="text-[10px] bg-blue-200 text-blue-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.routine}</span>
             </button>
             
             <button onClick={() => setActiveGame('money')} className="bg-amber-50 border border-amber-100 p-5 rounded-3xl flex flex-col items-center hover:bg-amber-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Coins className="w-8 h-8 text-amber-600" /></div>
-              <span className="font-bold text-amber-900 text-[13px] text-center">Money Match</span>
+              <span className="font-bold text-amber-900 text-[13px] text-center mb-2">Money Match</span>
+              <span className="text-[10px] bg-amber-200 text-amber-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.money}</span>
             </button>
             
             <button onClick={() => setActiveGame('tray')} className="bg-purple-50 border border-purple-100 p-5 rounded-3xl flex flex-col items-center hover:bg-purple-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Brain className="w-8 h-8 text-purple-600" /></div>
-              <span className="font-bold text-purple-900 text-[13px] text-center">Memory Tray</span>
+              <span className="font-bold text-purple-900 text-[13px] text-center mb-2">Memory Tray</span>
+              <span className="text-[10px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.tray}</span>
             </button>
             
             <button onClick={() => setActiveGame('calm')} className="bg-pink-50 border border-pink-100 p-5 rounded-3xl flex flex-col items-center hover:bg-pink-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Palette className="w-8 h-8 text-pink-600" /></div>
-              <span className="font-bold text-pink-900 text-[13px] text-center">Creative Calm</span>
+              <span className="font-bold text-pink-900 text-[13px] text-center mb-2">Creative Calm</span>
+              <span className="text-[10px] bg-pink-200 text-pink-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.calm}</span>
             </button>
             
             <button onClick={() => setActiveGame('sound')} className="bg-indigo-50 border border-indigo-100 p-5 rounded-3xl flex flex-col items-center hover:bg-indigo-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Ear className="w-8 h-8 text-indigo-600" /></div>
-              <span className="font-bold text-indigo-900 text-[13px] text-center">Sound Guess</span>
+              <span className="font-bold text-indigo-900 text-[13px] text-center mb-2">Sound Guess</span>
+              <span className="text-[10px] bg-indigo-200 text-indigo-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.sound}</span>
             </button>
             
             <button onClick={() => setActiveGame('explore')} className="bg-orange-50 border border-orange-100 p-5 rounded-3xl flex flex-col items-center hover:bg-orange-100 transition-all shadow-sm group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Compass className="w-8 h-8 text-orange-600" /></div>
-              <span className="font-bold text-orange-900 text-[13px] text-center">Explore & Learn</span>
+              <span className="font-bold text-orange-900 text-[13px] text-center mb-2">Explore & Learn</span>
+              <span className="text-[10px] bg-orange-200 text-orange-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.explore}</span>
             </button>
             
             <button onClick={() => setActiveGame('bird')} className="bg-red-50 border border-red-100 p-5 rounded-3xl flex flex-col items-center hover:bg-red-100 transition-all shadow-sm group">
-              <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Bird className="w-8 h-8 text-red-600" /></div>
-              <span className="font-bold text-red-900 text-[13px] text-center">Feed Bird</span>
+              <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Dog className="w-8 h-8 text-red-600" /></div>
+              <span className="font-bold text-red-900 text-[13px] text-center mb-2">Feed Dog</span>
+              <span className="text-[10px] bg-red-200 text-red-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.bird}</span>
             </button>
             
             <button onClick={() => setActiveGame('home')} className="bg-cyan-50 border border-cyan-100 p-5 rounded-3xl flex flex-col items-center hover:bg-cyan-100 transition-all shadow-sm col-span-2 group">
               <div className="bg-white p-3 rounded-2xl mb-3 group-hover:scale-110 transition-transform shadow-sm"><Map className="w-8 h-8 text-cyan-600" /></div>
-              <span className="font-bold text-cyan-900 text-[13px] text-center">Find Your Way Home</span>
+              <span className="font-bold text-cyan-900 text-[13px] text-center mb-2">Find Your Way Home</span>
+              <span className="text-[10px] bg-cyan-200 text-cyan-800 font-bold px-2 py-0.5 rounded-full">Lvl {gameLevels.home}</span>
             </button>
           </div>
              
