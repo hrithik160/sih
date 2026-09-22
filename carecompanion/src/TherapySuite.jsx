@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { saveTelemetryLocal } from './db';
+import coin1 from './assets/money/coin-1.svg';
+import coin2 from './assets/money/coin-2.svg';
+import coin5 from './assets/money/coin-5.svg';
+import coin10 from './assets/money/coin-10.svg';
+import coin20 from './assets/money/coin-20.svg';
+import note10 from './assets/money/note-10.svg';
+import note20 from './assets/money/note-20.svg';
+import note50 from './assets/money/note-50.svg';
+import note100 from './assets/money/note-100.svg';
 import { 
   ArrowLeft, Volume2, HelpCircle, MessageSquare, Leaf, Puzzle, 
   MessageCircle, Palette, Medal, Layout, Play, Rabbit, Music, 
@@ -258,6 +267,74 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
 };
 
 // 3. MONEY MATCH
+const moneyVisuals = {
+  coin: { 1: coin1, 2: coin2, 5: coin5, 10: coin10, 20: coin20 },
+  note: { 10: note10, 20: note20, 50: note50, 100: note100 }
+};
+
+const CurrencyVisual = ({ item, compact = false }) => (
+  <img
+    src={moneyVisuals[item.type][item.value]}
+    alt={`₹${item.value} ${item.type}`}
+    className={compact ? 'h-14 w-24 object-contain' : item.type === 'note' ? 'h-20 w-36 object-contain' : 'h-20 w-20 object-contain'}
+  />
+);
+
+const ProductIllustration = ({ name }) => {
+  if (name === 'Tea') {
+    return (
+      <svg viewBox="0 0 180 140" aria-hidden="true" className="h-32 w-full">
+        <ellipse cx="90" cy="119" rx="58" ry="9" fill="#d9b98a" opacity=".32" />
+        <path d="M54 47h65v49c0 13-10 22-23 22H77c-13 0-23-9-23-22V47Z" fill="#fff9ef" stroke="#9b6a42" strokeWidth="5" />
+        <path d="M119 60h15c14 0 21 10 17 22-3 9-11 14-24 13" fill="none" stroke="#9b6a42" strokeWidth="6" />
+        <path d="M62 47c5-12 13-17 24-17s19 5 24 17" fill="none" stroke="#9b6a42" strokeWidth="5" />
+        <path d="M72 24c-5-9 4-13 0-20M94 25c-5-9 4-13 0-20" fill="none" stroke="#d89b62" strokeLinecap="round" strokeWidth="4" />
+        <path d="M67 75h39" stroke="#e5b36d" strokeWidth="7" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (name === 'Book') {
+    return (
+      <svg viewBox="0 0 180 140" aria-hidden="true" className="h-32 w-full">
+        <ellipse cx="90" cy="118" rx="64" ry="9" fill="#b5c9bc" opacity=".38" />
+        <path d="m38 39 51-13 51 13v70l-51 13-51-13V39Z" fill="#d97858" stroke="#873e34" strokeWidth="5" />
+        <path d="M89 27v82M43 45l46-11 46 11" fill="none" stroke="#fff1d7" strokeWidth="4" />
+        <path d="M57 58h22M57 69h22M99 58h22M99 69h22" stroke="#fff1d7" strokeLinecap="round" strokeWidth="5" />
+        <path d="M64 91c12-9 25-9 37 0" fill="none" stroke="#fff1d7" strokeWidth="4" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 180 140" aria-hidden="true" className="h-32 w-full">
+      <ellipse cx="90" cy="118" rx="65" ry="9" fill="#d9b98a" opacity=".35" />
+      <path d="M42 72c9-28 28-43 48-43s39 15 48 43c4 14-5 35-48 35S38 86 42 72Z" fill="#f3c66d" stroke="#a8673a" strokeWidth="5" />
+      <circle cx="61" cy="65" r="18" fill="#ef7667" stroke="#a34a3d" strokeWidth="4" />
+      <circle cx="91" cy="52" r="20" fill="#f5d273" stroke="#b57b3e" strokeWidth="4" />
+      <circle cx="119" cy="68" r="18" fill="#9ecb80" stroke="#5e9254" strokeWidth="4" />
+      <path d="M90 33c-2-12 6-17 13-20" fill="none" stroke="#5e9254" strokeLinecap="round" strokeWidth="5" />
+    </svg>
+  );
+};
+
+const SavingsJar = ({ denomination, items, onDrop, onDragOver }) => (
+  <div className="relative flex min-h-[340px] flex-col items-center justify-end pb-5 pt-8" onDrop={onDrop} onDragOver={onDragOver}>
+    <div className="absolute top-0 z-20 h-8 w-28 rounded-t-xl border-4 border-[#a98967] bg-gradient-to-b from-[#f7e6c9] to-[#b58b61] shadow-md" />
+    <div className="absolute top-6 z-10 h-7 w-36 rounded-full border-4 border-[#9b795b] bg-[#d9bd96] shadow-inner" />
+    <div className="relative flex h-[278px] w-[220px] items-end justify-center overflow-hidden rounded-[42%_42%_30%_30%/25%_25%_18%_18%] border-[6px] border-[#9ab5b0] bg-gradient-to-br from-white/75 via-[#cfe8e4]/65 to-[#8fb8b1]/70 shadow-[inset_18px_0_25px_rgba(255,255,255,.7),inset_-20px_-12px_30px_rgba(54,105,99,.2),0_18px_22px_rgba(71,68,48,.18)]">
+      <div className="absolute left-7 top-8 h-44 w-7 rounded-full bg-white/70 blur-[2px]" />
+      <div className="absolute right-7 top-12 h-24 w-3 rounded-full bg-white/45" />
+      <div className="absolute bottom-4 left-4 right-4 h-36 rounded-[40%] bg-gradient-to-t from-[#9cc9b4]/70 to-transparent" />
+      <div className="relative z-10 flex max-h-40 flex-wrap-reverse items-end justify-center gap-1 px-6 pb-3">
+        {items.map(item => <CurrencyVisual key={item.id} item={item} compact />)}
+      </div>
+    </div>
+    <div className="relative z-30 -mt-3 rotate-[-2deg] rounded-lg border border-[#b58f61] bg-[#fff4d8] px-5 py-2 text-center shadow-md">
+      <div className="text-[11px] font-black uppercase tracking-[.2em] text-[#8d6545]">Sort into</div>
+      <div className="text-3xl font-black text-[#754831]">₹{denomination}</div>
+    </div>
+  </div>
+);
+
 const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
   const [sessionLevel] = useState(() => Math.min(4, Math.max(1, Number(level) || 1)));
   const [questions] = useState(() => createMoneyQuestions(sessionLevel));
@@ -341,10 +418,13 @@ const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
   if (won) {
     return (
       <PageContainer title="Money Match" level={sessionLevel}>
-        <div className="text-center mt-10 w-full">
-          <div className="text-8xl mb-8">🎉</div>
-          <h2 className="text-3xl font-black text-emerald-800 mb-8">Well done!</h2>
-          <button onClick={onBack} className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl text-xl">Back to Suite</button>
+        <div className="-m-6 flex min-h-full w-[calc(100%+3rem)] flex-col items-center justify-center bg-[#f8f1e7] p-6 text-center">
+          <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-full border-8 border-[#d8efe4] bg-white shadow-lg">
+            <CheckCircle2 className="h-14 w-14 text-[#2d8b69]" />
+          </div>
+          <p className="mb-2 text-sm font-black uppercase tracking-[.22em] text-[#9a6949]">Money Match complete</p>
+          <h2 className="mb-8 text-4xl font-black tracking-tight text-[#24453f]">Well done!</h2>
+          <button onClick={onBack} className="min-h-16 w-full max-w-sm rounded-2xl bg-[#2d8065] px-7 py-4 text-xl font-black text-white shadow-[0_8px_0_#1e604d] transition hover:bg-[#256e57] active:translate-y-1 active:shadow-[0_4px_0_#1e604d]">Back to Suite</button>
         </div>
       </PageContainer>
     );
@@ -352,35 +432,39 @@ const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
 
   if (isSorting) {
     return (
-      <PageContainer title={sessionLevel === 1 ? 'Money Sorting Easy' : 'Money Sorting Harder'} level={sessionLevel}>
-        <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
-          <div
-            onDragOver={event => event.preventDefault()}
-            onDrop={handleDrop}
-            className="min-h-72 bg-amber-50 border-4 border-amber-700 rounded-3xl p-5 flex flex-col items-center justify-center shadow-inner"
-          >
-            <div className="text-7xl mb-3">🫙</div>
-            <p className="text-2xl font-black text-amber-900 mb-4">₹{currentDenomination} jar</p>
-            <div className="flex flex-wrap gap-2 justify-center min-h-16">
-              {jarItems.map(item => <span key={item.id} className="text-4xl bg-white rounded-xl px-3 py-2 shadow" aria-label={`${item.value} ${item.type}`}>{item.type === 'coin' ? '🪙' : '💵'}</span>)}
+      <PageContainer title="Money Match" level={sessionLevel}>
+        <div className="-m-6 min-h-full w-[calc(100%+3rem)] bg-[#f8f1e7] p-4 sm:p-6">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="mb-1 text-sm font-black uppercase tracking-[.2em] text-[#a16e4c]">Level {sessionLevel}</p>
+                <h2 className="text-3xl font-black tracking-tight text-[#24453f]">{sessionLevel === 1 ? 'Money Sorting' : 'Money Sorting Harder'}</h2>
+              </div>
+              <div className="rounded-full border border-[#e7d3b7] bg-white/75 px-4 py-2 text-sm font-bold text-[#755c48]">Sort the matching money</div>
             </div>
-          </div>
-          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
-            <p className="text-center text-xl font-bold text-slate-700 mb-5">Put all the ₹{currentDenomination} money in the jar.</p>
-            <div className="grid grid-cols-2 gap-4">
-              {availableItems.map(item => (
-                <button
-                  key={item.id}
-                  draggable
-                  onDragStart={event => event.dataTransfer.setData('text/plain', item.id)}
-                  onClick={() => sortItem(item)}
-                  className="min-h-28 bg-emerald-50 border-2 border-emerald-200 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-2 text-xl font-black text-emerald-900 active:scale-95"
-                  aria-label={`Sort ${item.value} ${item.type}`}
-                >
-                  <span className="text-4xl">{item.type === 'coin' ? '🪙' : '💵'}</span>
-                  <span>₹{item.value} {item.type}</span>
-                </button>
-              ))}
+            <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(280px,.9fr)_minmax(360px,1.1fr)]">
+              <section className="rounded-[2rem] border border-[#ead8bf] bg-[#fffaf2] p-4 shadow-[0_14px_34px_rgba(91,69,40,.12)] sm:p-6">
+                <div className="mb-2 flex items-center justify-between">
+                  <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#a16e4c]">Your savings jar</p><p className="text-sm font-semibold text-[#756452]">Drop or tap matching money</p></div>
+                  {jarItems.length > 0 && <span className="rounded-full bg-[#dff1e8] px-3 py-1 text-xs font-black text-[#287054]">Jar filling</span>}
+                </div>
+                <SavingsJar denomination={currentDenomination} items={jarItems} onDrop={handleDrop} onDragOver={event => event.preventDefault()} />
+              </section>
+              <section className="rounded-[2rem] border border-[#ead8bf] bg-[#fffdf9] p-4 shadow-[0_14px_34px_rgba(91,69,40,.1)] sm:p-6">
+                <div className="mb-5 flex items-center justify-between border-b border-[#f0e1ce] pb-4">
+                  <div><p className="text-xs font-black uppercase tracking-[.2em] text-[#a16e4c]">Money to sort</p><p className="text-xl font-black text-[#24453f]">Find every ₹{currentDenomination}</p></div>
+                  <div className="rounded-xl bg-[#fff0d7] px-3 py-2 text-2xl font-black text-[#9b6136]">₹{currentDenomination}</div>
+                </div>
+                {errors > 0 && <div className="mb-4 rounded-xl bg-[#fff4dc] px-4 py-3 text-center text-sm font-bold text-[#96652e]" role="status">That one belongs in another jar. Try again.</div>}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  {availableItems.map(item => (
+                    <button key={item.id} draggable onDragStart={event => event.dataTransfer.setData('text/plain', item.id)} onClick={() => sortItem(item)} className="group flex min-h-32 flex-col items-center justify-center rounded-2xl border-2 border-[#eadcca] bg-[#fffaf3] px-2 py-3 shadow-[0_5px_0_#eadcca] transition hover:-translate-y-1 hover:border-[#7eb89e] hover:bg-[#f0f9f3] active:translate-y-1 active:shadow-none" aria-label={`Sort ${item.value} ${item.type}`}>
+                      <CurrencyVisual item={item} />
+                      <span className="text-sm font-black capitalize text-[#554c42]">₹{item.value} {item.type}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
         </div>
@@ -389,21 +473,38 @@ const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
   }
 
   return (
-    <PageContainer title={sessionLevel === 3 ? 'What Can I Buy?' : 'Count the Money'} level={sessionLevel}>
-      {sessionLevel === 3 ? (
-        <div className="w-full text-center">
-          <p className="text-2xl font-black text-slate-700 mb-8">You have ₹{question.amount}. Choose one thing you can buy.</p>
-          <div className="grid grid-cols-1 gap-4">
-            {question.products.map(product => <button key={product.name} onClick={() => handleChoice(product)} className="min-h-24 p-5 bg-white rounded-2xl shadow border-2 border-slate-200 text-xl font-black text-slate-800 hover:border-emerald-500">{product.emoji} {product.name} - ₹{product.price}</button>)}
+    <PageContainer title="Money Match" level={sessionLevel}>
+      <div className="-m-6 min-h-full w-[calc(100%+3rem)] bg-[#f8f1e7] p-4 sm:p-6">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-6">
+            <p className="mb-1 text-sm font-black uppercase tracking-[.2em] text-[#a16e4c]">Level {sessionLevel}</p>
+            <h2 className="text-3xl font-black tracking-tight text-[#24453f]">{sessionLevel === 3 ? 'What Can I Buy?' : 'Count the Money'}</h2>
           </div>
+      {sessionLevel === 3 ? (
+        <div className="grid items-stretch gap-5 lg:grid-cols-[.75fr_1.25fr]">
+          <section className="flex min-h-[310px] flex-col justify-center rounded-[2rem] border border-[#ead8bf] bg-[#fffaf2] p-6 text-center shadow-[0_14px_34px_rgba(91,69,40,.12)]">
+            <p className="text-xs font-black uppercase tracking-[.2em] text-[#a16e4c]">You have</p>
+            <div className="my-5 text-7xl font-black tracking-tight text-[#286b58]">₹{question.amount}</div>
+            <p className="text-lg font-bold text-[#6d5d4b]">Choose one thing you can afford.</p>
+          </section>
+          <section className="rounded-[2rem] border border-[#ead8bf] bg-[#fffdf9] p-4 shadow-[0_14px_34px_rgba(91,69,40,.1)] sm:p-6">
+            <p className="mb-4 text-lg font-black text-[#24453f]">Which would you like to buy?</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {question.products.map(product => <button key={product.name} onClick={() => handleChoice(product)} className="group overflow-hidden rounded-2xl border-2 border-[#eadcca] bg-[#fffaf3] text-left shadow-[0_5px_0_#eadcca] transition hover:-translate-y-1 hover:border-[#7eb89e] hover:bg-[#f0f9f3] active:translate-y-1 active:shadow-none"><div className="border-b border-[#f0e1ce] bg-[#fdf0db] px-2 pt-2"><ProductIllustration name={product.name} /></div><div className="p-4"><div className="text-lg font-black text-[#3e4d43]">{product.name}</div><div className="mt-1 text-xl font-black text-[#a3623e]">₹{product.price}</div></div></button>)}
+            </div>
+          </section>
         </div>
       ) : (
-        <div className="w-full text-center">
-          <p className="text-2xl font-black text-slate-700 mb-8">How much money is here?</p>
-          <div className="flex flex-wrap justify-center gap-3 mb-8">{question.items.map(item => <span key={item.id} className="text-4xl bg-white rounded-xl px-4 py-3 shadow" aria-label={`${item.value} ${item.type}`}>{item.type === 'coin' ? '🪙' : '💵'} <span className="text-lg font-bold">₹{item.value}</span></span>)}</div>
-          <div className="grid grid-cols-2 gap-4">{question.options.map(total => <button key={total} onClick={() => handleChoice(total)} className="min-h-20 p-4 bg-white rounded-2xl shadow border-2 border-slate-200 text-2xl font-black text-emerald-800 hover:border-emerald-500">₹{total}</button>)}</div>
+        <div className="mx-auto max-w-4xl">
+          <section className="rounded-[2rem] border border-[#ead8bf] bg-[#fffaf2] p-4 shadow-[0_14px_34px_rgba(91,69,40,.12)] sm:p-7">
+            <div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[.2em] text-[#a16e4c]">Money on the table</p><h3 className="text-2xl font-black text-[#24453f]">How much money is here?</h3></div><div className="h-3 w-3 rounded-full bg-[#dca75d] shadow-[0_0_0_6px_#f8e6c9]" /></div>
+            <div className="flex min-h-48 flex-wrap items-center justify-center gap-4 rounded-2xl border border-[#ddc6a7] bg-gradient-to-br from-[#d8b77f]/35 to-[#f3dfbd]/45 p-5 shadow-inner sm:gap-7">{question.items.map(item => <div key={item.id} className="flex flex-col items-center rounded-xl bg-white/55 px-2 py-2 shadow-sm" aria-label={`${item.value} ${item.type}`}><CurrencyVisual item={item} /><span className="text-sm font-black text-[#554c42]">₹{item.value}</span></div>)}</div>
+          </section>
+          <section className="mt-5 rounded-[2rem] border border-[#ead8bf] bg-[#fffdf9] p-4 shadow-[0_14px_34px_rgba(91,69,40,.1)] sm:p-6"><p className="mb-4 text-center text-lg font-black text-[#6d5d4b]">Choose the total</p><div className="grid grid-cols-3 gap-3 sm:gap-4">{question.options.map(total => <button key={total} onClick={() => handleChoice(total)} className="min-h-20 rounded-2xl border-2 border-[#eadcca] bg-[#fffaf3] text-2xl font-black text-[#286b58] shadow-[0_5px_0_#eadcca] transition hover:-translate-y-1 hover:border-[#7eb89e] hover:bg-[#f0f9f3] active:translate-y-1 active:shadow-none">₹{total}</button>)}</div></section>
         </div>
       )}
+        </div>
+      </div>
     </PageContainer>
   );
 };
