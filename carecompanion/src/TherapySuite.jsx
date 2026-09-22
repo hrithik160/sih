@@ -259,51 +259,200 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
 
 // 3. MONEY MATCH
 const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
+  const [sessionLevel] = useState(() => Math.min(4, Math.max(1, Number(level) || 1)));
+  const [questions] = useState(() => createMoneyQuestions(sessionLevel));
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [sortedItems, setSortedItems] = useState([]);
+  const [currentDenominationIndex, setCurrentDenominationIndex] = useState(0);
+  const [errors, setErrors] = useState(0);
   const [won, setWon] = useState(false);
   const [startTime] = useState(Date.now());
-  
-  const price = level === 1 ? 20 : level === 2 ? 30 : 30;
-  const have = level === 3 ? 50 : 0;
-  
-  const options = level === 1 
-    ? [{label: '₹10', val: 10}, {label: '₹20', val: 20}, {label: '₹50', val: 50}]
-    : level === 2
-    ? [{label: '₹10 + ₹10 + ₹10', val: 30}, {label: '₹20 + ₹20', val: 40}, {label: '₹50', val: 50}]
-    : [{label: '₹10', val: 10}, {label: '₹20', val: 20}, {label: '₹30', val: 30}];
 
-  const correctVal = level === 3 ? (have - price) : price;
+  const question = questions[questionIndex];
+  const isSorting = sessionLevel === 1 || sessionLevel === 2;
+  const currentDenomination = isSorting ? question.denominations[currentDenominationIndex] : null;
+  const availableItems = isSorting
+    ? question.items.filter(item => !sortedItems.includes(item.id))
+    : [];
+  const jarItems = isSorting
+    ? question.items.filter(item => item.value === currentDenomination && sortedItems.includes(item.id))
+    : [];
 
-  const handleSelect = (val) => {
-    if (val === correctVal) {
-      processTelemetry('MoneyMatch', 1000, 0, (Date.now() - startTime)/1000);
+  const recordAnswer = (answerErrors) => {
+    processTelemetry('MoneyMatch', 1000, answerErrors, (Date.now() - startTime) / 1000);
+  };
+
+  const finishQuestion = (answerErrors) => {
+    recordAnswer(answerErrors);
+    if (questionIndex === questions.length - 1) {
       setWon(true);
-    } else {
-      processTelemetry('MoneyMatch', 1000, 1, (Date.now() - startTime)/1000);
+      return;
+    }
+    setQuestionIndex(index => index + 1);
+    setSortedItems([]);
+    setCurrentDenominationIndex(0);
+    setErrors(0);
+  };
+
+  const sortItem = (item) => {
+    if (!isSorting || sortedItems.includes(item.id)) return;
+    if (item.value !== currentDenomination) {
+      setErrors(count => count + 1);
+      recordAnswer(1);
+      return;
+    }
+
+    const nextSortedItems = [...sortedItems, item.id];
+    setSortedItems(nextSortedItems);
+    const denominationComplete = question.items
+      .filter(candidate => candidate.value === currentDenomination)
+      .every(candidate => nextSortedItems.includes(candidate.id));
+
+    if (!denominationComplete) return;
+    if (currentDenominationIndex < question.denominations.length - 1) {
+      setCurrentDenominationIndex(index => index + 1);
+      return;
+    }
+    finishQuestion(errors);
+  };
+
+  const handleChoice = (choice) => {
+    if (sessionLevel === 3) {
+      if (choice.affordable) finishQuestion(errors);
+      else {
+        setErrors(count => count + 1);
+        recordAnswer(1);
+      }
+      return;
+    }
+    if (choice === question.total) finishQuestion(errors);
+    else {
+      setErrors(count => count + 1);
+      recordAnswer(1);
     }
   };
 
+  const handleDrop = (event) => {
+    event.preventDefault();
+    const item = question.items.find(candidate => candidate.id === event.dataTransfer.getData('text/plain'));
+    if (item) sortItem(item);
+  };
+
+  if (won) {
+    return (
+      <PageContainer title="Money Match" level={sessionLevel}>
+        <div className="text-center mt-10 w-full">
+          <div className="text-8xl mb-8">🎉</div>
+          <h2 className="text-3xl font-black text-emerald-800 mb-8">Well done!</h2>
+          <button onClick={onBack} className="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl text-xl">Back to Suite</button>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (isSorting) {
+    return (
+      <PageContainer title={sessionLevel === 1 ? 'Money Sorting Easy' : 'Money Sorting Harder'} level={sessionLevel}>
+        <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <div
+            onDragOver={event => event.preventDefault()}
+            onDrop={handleDrop}
+            className="min-h-72 bg-amber-50 border-4 border-amber-700 rounded-3xl p-5 flex flex-col items-center justify-center shadow-inner"
+          >
+            <div className="text-7xl mb-3">🫙</div>
+            <p className="text-2xl font-black text-amber-900 mb-4">₹{currentDenomination} jar</p>
+            <div className="flex flex-wrap gap-2 justify-center min-h-16">
+              {jarItems.map(item => <span key={item.id} className="text-4xl bg-white rounded-xl px-3 py-2 shadow" aria-label={`${item.value} ${item.type}`}>{item.type === 'coin' ? '🪙' : '💵'}</span>)}
+            </div>
+          </div>
+          <div className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200">
+            <p className="text-center text-xl font-bold text-slate-700 mb-5">Put all the ₹{currentDenomination} money in the jar.</p>
+            <div className="grid grid-cols-2 gap-4">
+              {availableItems.map(item => (
+                <button
+                  key={item.id}
+                  draggable
+                  onDragStart={event => event.dataTransfer.setData('text/plain', item.id)}
+                  onClick={() => sortItem(item)}
+                  className="min-h-28 bg-emerald-50 border-2 border-emerald-200 rounded-2xl shadow-sm flex flex-col items-center justify-center gap-2 text-xl font-black text-emerald-900 active:scale-95"
+                  aria-label={`Sort ${item.value} ${item.type}`}
+                >
+                  <span className="text-4xl">{item.type === 'coin' ? '🪙' : '💵'}</span>
+                  <span>₹{item.value} {item.type}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </PageContainer>
+    );
+  }
+
   return (
-    <PageContainer title="Money Match" level={level}>
-      {!won ? (
-        <div className="text-center w-full">
-          <div className="text-8xl mb-6">🍎</div>
-          <p className="text-2xl font-bold mb-8 text-slate-700">
-            {level === 3 ? `You have ₹${have}. The apple costs ₹${price}. How much change should you get?` : `The apple costs ₹${price}. Pay the correct amount.`}
-          </p>
-          <div className="flex flex-col gap-4">
-            {options.map((opt, i) => (
-              <button key={i} onClick={() => handleSelect(opt.val)} className="p-5 bg-white rounded-xl shadow text-xl font-bold border-2 border-transparent hover:border-emerald-500">{opt.label}</button>
-            ))}
+    <PageContainer title={sessionLevel === 3 ? 'What Can I Buy?' : 'Count the Money'} level={sessionLevel}>
+      {sessionLevel === 3 ? (
+        <div className="w-full text-center">
+          <p className="text-2xl font-black text-slate-700 mb-8">You have ₹{question.amount}. Choose one thing you can buy.</p>
+          <div className="grid grid-cols-1 gap-4">
+            {question.products.map(product => <button key={product.name} onClick={() => handleChoice(product)} className="min-h-24 p-5 bg-white rounded-2xl shadow border-2 border-slate-200 text-xl font-black text-slate-800 hover:border-emerald-500">{product.emoji} {product.name} - ₹{product.price}</button>)}
           </div>
         </div>
       ) : (
-        <div className="text-center mt-10">
-          <div className="text-8xl mb-8">🎉</div>
-          <button onClick={onBack} className="bg-emerald-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
+        <div className="w-full text-center">
+          <p className="text-2xl font-black text-slate-700 mb-8">How much money is here?</p>
+          <div className="flex flex-wrap justify-center gap-3 mb-8">{question.items.map(item => <span key={item.id} className="text-4xl bg-white rounded-xl px-4 py-3 shadow" aria-label={`${item.value} ${item.type}`}>{item.type === 'coin' ? '🪙' : '💵'} <span className="text-lg font-bold">₹{item.value}</span></span>)}</div>
+          <div className="grid grid-cols-2 gap-4">{question.options.map(total => <button key={total} onClick={() => handleChoice(total)} className="min-h-20 p-4 bg-white rounded-2xl shadow border-2 border-slate-200 text-2xl font-black text-emerald-800 hover:border-emerald-500">₹{total}</button>)}</div>
         </div>
       )}
     </PageContainer>
   );
+};
+
+const MONEY_NOTES = [10, 20, 50, 100];
+const MONEY_COINS = [1, 2, 5, 10, 20];
+
+const createMoneyItem = (value, type, id) => ({ id, value, type });
+
+const createSortingQuestion = (hard) => {
+  const count = hard ? 6 + Math.floor(Math.random() * 4) : 3 + Math.floor(Math.random() * 3);
+  const items = [];
+  const denominations = [];
+  while (items.length < count) {
+    const type = Math.random() > 0.5 ? 'coin' : 'note';
+    const pool = type === 'coin' ? MONEY_COINS : MONEY_NOTES;
+    const value = pool[Math.floor(Math.random() * pool.length)];
+    if (items.length < 2 && denominations.includes(value)) continue;
+    if (hard && Math.random() < 0.45 && items.some(item => item.value === value && item.type === type)) continue;
+    items.push(createMoneyItem(value, type, `${value}-${type}-${items.length}`));
+    if (!denominations.includes(value)) denominations.push(value);
+  }
+  return { items: shuffle(items), denominations: shuffle(denominations) };
+};
+
+const createBuyQuestion = (amount) => {
+  const products = [
+    { name: 'Tea', emoji: '☕', price: Math.max(5, amount - 10), affordable: true },
+    { name: 'Book', emoji: '📖', price: amount + 20, affordable: false },
+    { name: 'Fruit basket', emoji: '🍎', price: amount + 35, affordable: false }
+  ];
+  return { amount, products: shuffle(products) };
+};
+
+const createCountQuestion = (index) => {
+  const combinations = [
+    [['note', 20], ['coin', 5], ['coin', 2]],
+    [['note', 50], ['note', 10], ['coin', 10], ['coin', 1]],
+    [['note', 100], ['note', 20], ['coin', 20], ['coin', 5], ['coin', 2]]
+  ];
+  const items = combinations[index].map(([type, value], itemIndex) => createMoneyItem(value, type, `count-${index}-${itemIndex}`));
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  return { items: shuffle(items), total, options: shuffle([total, total + 10, Math.max(1, total - 5)]) };
+};
+
+const createMoneyQuestions = (level) => {
+  if (level === 1 || level === 2) return Array.from({ length: 3 }, () => createSortingQuestion(level === 2));
+  if (level === 3) return shuffle([15, 30, 60, 120]).slice(0, 3).map(createBuyQuestion);
+  return shuffle([0, 1, 2]).map(createCountQuestion);
 };
 
 // 4. MEMORY TRAY
