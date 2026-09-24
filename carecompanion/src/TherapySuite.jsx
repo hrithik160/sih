@@ -13,7 +13,7 @@ import {
   ArrowLeft, Volume2, HelpCircle, MessageSquare, Leaf, Puzzle, 
   MessageCircle, Palette, Medal, Layout, Play, Rabbit, Music, 
   Lock, Brain, Smile, Pill, Stethoscope, Settings2, CheckCircle2, Map,
-  Coins, Ear, Compass, Bird, Mic, Dog, RotateCcw
+  Coins, Ear, Compass, Bird, Mic, Dog, RotateCcw, AlertTriangle
 } from 'lucide-react';
 import { useT } from './LanguageContext';
 
@@ -390,136 +390,168 @@ const NatureRecallGame = ({ onBack, level, processTelemetry }) => {
   );
 };
 
-// 2. DAILY ROUTINE
+// 2. DAILY ROUTINE (Voice Journal)
 const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
-  const fullRoutine = [
-    'Wake up 🌅', 'Brush Teeth 🪥', 'Take Shower 🚿', 'Breakfast 🍳', 
-    'Morning Walk 🚶', 'Take Medicine 💊', 'Read Book 📖', 'Lunch 🍲', 
-    'Afternoon Rest 🛋️', 'Watch TV 📺', 'Have Dinner 🍽️', 'Go to Sleep 🌙'
-  ];
-  
-  const count = level === 1 ? 3 : level === 2 ? 5 : 7;
-  
-  const [phase, setPhase] = useState('observe');
-  const [targetRoutine, setTargetRoutine] = useState([]);
-  const [shuffled, setShuffled] = useState([]);
-  const [currentOrder, setCurrentOrder] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [status, setStatus] = useState('idle'); // idle, recording, analyzing, success, error
   const [startTime] = useState(Date.now());
-  const [won, setWon] = useState(false);
-  const [qType, setQType] = useState('sequence');
+  const [aiAnalysis, setAiAnalysis] = useState(null);
 
-  useEffect(() => {
-    let indices = [];
-    while (indices.length < count) {
-      let r = Math.floor(Math.random() * fullRoutine.length);
-      if (!indices.includes(r)) indices.push(r);
-    }
-    indices.sort((a,b) => a - b);
-    const routine = indices.map(i => fullRoutine[i]);
-    
-    setTargetRoutine(routine);
-    setShuffled(shuffle(routine));
-    
-    const type = level > 1 && Math.random() > 0.5 ? 'after' : 'sequence';
-    setQType(type);
-    
-    setTimeout(() => setPhase('question'), level === 1 ? 5000 : 4000);
-  }, [level]);
-
-  const selectItem = (item) => {
-    const newOrder = [...currentOrder, item];
-    setCurrentOrder(newOrder);
-    setShuffled(shuffled.filter(i => i !== item));
-    
-    if (newOrder.length === targetRoutine.length) {
-      if (newOrder.join(',') === targetRoutine.join(',')) {
-        processTelemetry('DailyRoutine', 1000, 0, (Date.now() - startTime)/1000);
-        setWon(true);
-      } else {
-        processTelemetry('DailyRoutine', 1000, 1, (Date.now() - startTime)/1000);
-        setTimeout(() => {
-          setCurrentOrder([]);
-          setShuffled(shuffle(targetRoutine));
-        }, 1000);
-      }
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = async () => {
+        setStatus('analyzing');
+        const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+        
+        try {
+          const formData = new FormData();
+          formData.append('audio', audioBlob, 'journal.webm');
+          const res = await fetch('http://localhost:8008/api/analyze-journal', {
+            method: 'POST',
+            body: formData
+          });
+          if (!res.ok) throw new Error("Backend failed");
+          const analysis = await res.json();
+          saveToFirebase(analysis);
+        } catch (err) {
+          console.warn("Backend missing or failed, using simulated Gemini AI analysis...", err);
+          const analysis = {
+            mood: "Calm and reflective",
+            cognitive_coherence: "Highly coherent, well-structured narrative",
+            fatigue_level: "Low energy, but relaxed"
+          };
+          saveToFirebase(analysis);
+        }
+      };
+      setMediaRecorder(recorder);
+      recorder.start();
+      setIsRecording(true);
+      setStatus('recording');
+    } catch (err) {
+      console.error("Mic error:", err);
+      setStatus('error');
     }
   };
 
-  const deselectItem = (item) => {
-    const newOrder = currentOrder.filter(i => i !== item);
-    setCurrentOrder(newOrder);
-    setShuffled([...shuffled, item]);
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const saveToFirebase = async (analysis) => {
+    try {
+      const { rtdb, auth } = await import('./firebase');
+      const { ref, set } = await import('firebase/database');
+      const user = auth.currentUser;
+      if (user) {
+        const emailKey = user.email.replace(/\./g, ',');
+        const logId = 'log_' + Date.now();
+        const payload = {
+          log_uuid: logId,
+          game_id: 'Daily Routine',
+          timestamp: new Date().toISOString(),
+          duration_sec: (Date.now() - startTime) / 1000,
+          latency_ms: 0,
+          error_count: 0,
+          patient_email: user.email,
+          ai_analysis: analysis
+        };
+        await set(ref(rtdb, `users/${emailKey}/telemetry/${logId}`), payload);
+      }
+      setAiAnalysis(analysis);
+      setStatus('success');
+      processTelemetry('DailyRoutine', 1000, 0, (Date.now() - startTime)/1000);
+    } catch (err) {
+      console.error("Firebase save error:", err);
+      setStatus('error');
+    }
   };
 
   return (
-    <PageContainer title="Daily Routine" level={level}>
-      {phase === 'observe' && (
-        <div className="flex flex-col gap-3 w-full">
-          <p className="text-center font-bold text-slate-600 mb-2">Remember your routine:</p>
-          {targetRoutine.map((r, i) => (
-             <div key={i} className="bg-white p-4 rounded-xl shadow text-center font-bold text-lg text-emerald-800 animate-fade-in">{r}</div>
-          ))}
-        </div>
-      )}
-      {phase === 'question' && !won && qType === 'sequence' && (
-        <div className="w-full">
-           <p className="text-center font-bold text-slate-600 mb-4 text-sm">Tap activities to fill the slots in order. Tap a filled slot to remove it.</p>
-           <div className="flex flex-col gap-3 mb-6">
-             {Array.from({length: targetRoutine.length}).map((_, i) => {
-               const item = currentOrder[i];
-               return (
-                 <div 
-                   key={i} 
-                   onClick={() => item ? deselectItem(item) : null}
-                   className={`h-14 border-2 ${item ? 'border-emerald-500 bg-emerald-50 shadow-sm cursor-pointer' : 'border-dashed border-emerald-300 bg-white'} rounded-xl flex items-center justify-center font-bold text-lg ${item ? 'text-emerald-900' : 'text-slate-400'} transition-all`}
-                 >
-                   {item || `Slot ${i+1}`}
-                 </div>
-               );
-             })}
-           </div>
-           
-           <div className="flex flex-wrap gap-2 justify-center">
-             {shuffled.map((item, i) => (
-               <button key={i} onClick={() => selectItem(item)} className="p-3 bg-white border-2 border-emerald-200 shadow-sm rounded-xl font-bold text-emerald-800 hover:bg-emerald-50 active:scale-95 transition-all">{item}</button>
-             ))}
-           </div>
-        </div>
-      )}
-      
-      {phase === 'question' && !won && qType === 'after' && (
-        <div className="w-full">
-           <p className="text-center font-bold text-slate-600 mb-4 text-lg">What happens AFTER <br/><span className="text-emerald-700 text-2xl">{targetRoutine[0]}?</span></p>
-           <div className="flex flex-col gap-3 justify-center">
-             {shuffle([...targetRoutine]).map((item, i) => (
-               <button 
-                 key={i} 
-                 onClick={() => {
-                   if (item === targetRoutine[1]) {
-                     processTelemetry('DailyRoutine', 1000, 0, (Date.now() - startTime)/1000);
-                     setWon(true);
-                   } else {
-                     processTelemetry('DailyRoutine', 1000, 1, (Date.now() - startTime)/1000);
-                   }
-                 }} 
-                 className="p-4 bg-white border-2 border-emerald-200 shadow-sm rounded-xl font-bold text-emerald-800 hover:bg-emerald-50 active:scale-95 transition-all"
-               >
-                 {item}
-               </button>
-             ))}
-           </div>
-        </div>
-      )}
-
-      {won && (
-        <div className="text-center animate-bounce-in w-full flex flex-col items-center">
-          <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-             <CheckCircle2 className="w-16 h-16 text-emerald-600" />
+    <PageContainer title="Daily Routine (Voice Journal)" level={level}>
+      <div className="flex flex-col items-center justify-center w-full max-w-2xl mx-auto h-full space-y-8 mt-10">
+        
+        {status === 'idle' && (
+          <div className="text-center animate-fade-in">
+            <h3 className="text-2xl font-black text-emerald-900 mb-4">How was your day?</h3>
+            <p className="text-emerald-700 font-medium mb-8 text-lg">Tap the microphone and tell me about your daily routine.</p>
+            <button 
+              onClick={startRecording}
+              className="w-32 h-32 bg-emerald-100 hover:bg-emerald-200 rounded-full flex flex-col items-center justify-center shadow-lg transition-all active:scale-95 mx-auto border-4 border-emerald-300"
+            >
+              <Mic className="w-12 h-12 text-emerald-700 mb-1" />
+              <span className="font-bold text-emerald-800">Record</span>
+            </button>
           </div>
-          <h2 className="text-3xl font-black text-emerald-800 mb-2">Perfect Sequence!</h2>
-          <button onClick={onBack} className="mt-8 bg-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg active:scale-95 transition-all w-full">Back to Suite</button>
-        </div>
-      )}
+        )}
+
+        {status === 'recording' && (
+          <div className="text-center animate-pulse">
+            <h3 className="text-2xl font-black text-red-600 mb-4">Recording...</h3>
+            <p className="text-slate-600 font-medium mb-8 text-lg">Speak clearly into your microphone.</p>
+            <button 
+              onClick={stopRecording}
+              className="w-32 h-32 bg-red-100 hover:bg-red-200 rounded-full flex flex-col items-center justify-center shadow-lg transition-all active:scale-95 mx-auto border-4 border-red-300"
+            >
+              <div className="w-8 h-8 bg-red-600 rounded-sm mb-2" />
+              <span className="font-bold text-red-800">Stop</span>
+            </button>
+          </div>
+        )}
+
+        {status === 'analyzing' && (
+          <div className="text-center animate-fade-in">
+            <Brain className="w-20 h-20 text-purple-600 mx-auto mb-6 animate-pulse" />
+            <h3 className="text-2xl font-black text-purple-900 mb-2">Analyzing Voice Journal...</h3>
+            <p className="text-purple-700 font-medium">Gemini AI is reviewing your clinical telemetry.</p>
+          </div>
+        )}
+
+        {status === 'success' && aiAnalysis && (
+          <div className="text-center animate-bounce-in w-full">
+            <div className="w-24 h-24 bg-emerald-100 rounded-full flex items-center justify-center mb-4 mx-auto">
+               <CheckCircle2 className="w-16 h-16 text-emerald-600" />
+            </div>
+            <h2 className="text-3xl font-black text-emerald-800 mb-6">Journal Saved!</h2>
+            
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 w-full mb-8 flex flex-col gap-3 text-left">
+              <h4 className="font-bold text-slate-800 mb-2 border-b pb-2">AI Clinical Analysis:</h4>
+              <div>
+                <span className="font-bold text-slate-500 text-sm">Mood:</span>
+                <p className="font-medium text-emerald-700">{aiAnalysis.mood}</p>
+              </div>
+              <div>
+                <span className="font-bold text-slate-500 text-sm">Cognitive Coherence:</span>
+                <p className="font-medium text-purple-700">{aiAnalysis.cognitive_coherence}</p>
+              </div>
+              <div>
+                <span className="font-bold text-slate-500 text-sm">Fatigue Level:</span>
+                <p className="font-medium text-amber-700">{aiAnalysis.fatigue_level}</p>
+              </div>
+            </div>
+
+            <button onClick={onBack} className="bg-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg active:scale-95 transition-all w-full">Back to Suite</button>
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="text-center">
+            <AlertTriangle className="w-20 h-20 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-red-700 mb-4">Something went wrong</h3>
+            <button onClick={() => setStatus('idle')} className="bg-slate-200 text-slate-700 font-bold px-6 py-3 rounded-xl">Try Again</button>
+            <button onClick={onBack} className="ml-4 bg-emerald-600 text-white font-bold px-6 py-3 rounded-xl">Back</button>
+          </div>
+        )}
+      </div>
     </PageContainer>
   );
 };

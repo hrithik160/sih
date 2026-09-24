@@ -460,31 +460,36 @@ export default function DoctorPortal({ doctorInfo, prescribedGame, setPrescribed
             </div>
 
             <div className="bg-slate-800 rounded-3xl p-6 border border-slate-700 shadow-xl flex flex-col">
-              <h2 className="text-xl font-bold text-emerald-400 mb-6 flex items-center"><BrainCircuit className="w-5 h-5 mr-2"/> AI Clinical Assessment</h2>
-              <div className="bg-slate-900 p-5 rounded-2xl border border-slate-700 flex-1 overflow-y-auto custom-scrollbar">
-                <ul className="space-y-4">
-                  <li className="flex items-start">
-                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mt-1 mr-3 flex-shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-200 mb-1">Consistency & Engagement</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">Patient shows regular engagement with prescribed therapy modules. Adherence rate is stable, indicating good routine formation.</p>
-                    </div>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500 mt-1 mr-3 flex-shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-200 mb-1">Cognitive Load Assessment</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">Reaction times slightly elevated during complex memory tasks. Recommend maintaining current difficulty settings before progressing.</p>
-                    </div>
-                  </li>
-                  <li className="flex items-start">
-                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500 mt-1 mr-3 flex-shrink-0 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-200 mb-1">Motor Skill Precision</h4>
-                      <p className="text-xs text-slate-400 leading-relaxed">No significant tremors detected during screen interactions; touch precision and dwell time are well within normal bounds for this age group.</p>
-                    </div>
-                  </li>
-                </ul>
+              <h2 className="text-xl font-bold text-blue-400 mb-6 flex items-center"><FileText className="w-5 h-5 mr-2" /> Voice Journal Telemetry (Daily Routine)</h2>
+              <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
+                {safeGameHistory.filter(log => log.game_id === 'Daily Routine' && log.ai_analysis).length > 0 ? (
+                  safeGameHistory.filter(log => log.game_id === 'Daily Routine' && log.ai_analysis).sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map((log, i) => (
+                    <details key={i} className="group bg-slate-900 rounded-2xl border border-slate-700 overflow-hidden">
+                      <summary className="cursor-pointer p-4 flex justify-between items-center text-white font-bold hover:bg-slate-800 transition-colors">
+                        <span>{new Date(log.timestamp).toLocaleDateString()} - {new Date(log.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span className="text-slate-500 text-sm group-open:rotate-180 transition-transform">▼</span>
+                      </summary>
+                      <div className="p-4 border-t border-slate-700 space-y-3 bg-slate-900/50">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-500 uppercase">Mood</span>
+                          <span className="text-emerald-400 font-medium">{log.ai_analysis.mood}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-500 uppercase">Cognitive Coherence</span>
+                          <span className="text-purple-400 font-medium">{log.ai_analysis.cognitive_coherence}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-500 uppercase">Fatigue Level</span>
+                          <span className="text-amber-400 font-medium">{log.ai_analysis.fatigue_level}</span>
+                        </div>
+                      </div>
+                    </details>
+                  ))
+                ) : (
+                  <div className="text-center p-6 text-slate-500 font-bold border border-slate-700 rounded-2xl bg-slate-900">
+                    No Voice Journals recorded yet.
+                  </div>
+                )}
               </div>
             </div>
           </div>
