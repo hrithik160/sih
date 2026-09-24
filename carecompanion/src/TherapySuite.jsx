@@ -3401,60 +3401,676 @@ if (picture.id === 2) {
 };
 // 6. SOUND GUESS
 const SoundGuessGame = ({ onBack, level, processTelemetry }) => {
-  const [phase, setPhase] = useState('play');
-  const [startTime] = useState(Date.now());
-  const pool = [
-    {icon: '🐦', name: 'Bird'}, {icon: '🐶', name: 'Dog'}, {icon: '🔔', name: 'Bell'}, 
-    {icon: '🌧️', name: 'Rain'}, {icon: '🚗', name: 'Car'}, {icon: '🐄', name: 'Cow'}
-  ];
+  const [phase, setPhase] = useState('play'); // 'play', 'guess', 'result'
+  const [startTime, setStartTime] = useState(Date.now());
   const [options, setOptions] = useState([]);
   const [target, setTarget] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [feedback, setFeedback] = useState(null); // { selected: string, isCorrect: boolean }
+  const [showHelp, setShowHelp] = useState(false);
+  const [currentLevel, setCurrentLevel] = useState(level);
 
-  useEffect(() => {
-    const opts = shuffle(pool).slice(0, level === 1 ? 2 : level === 2 ? 3 : 4);
-    setOptions(opts);
-    setTarget(opts[Math.floor(Math.random() * opts.length)]);
-  }, [level]);
+  const activeAudioCtxRef = React.useRef(null);
+  const activeAudioFileRef = React.useRef(null);
+  const playbackTimeoutRef = React.useRef(null);
 
-  const playSound = () => {
-    const u = new SpeechSynthesisUtterance(`${target.name} sound effect`);
-    window.speechSynthesis.speak(u);
-    setTimeout(() => setPhase('guess'), 2000);
+  const pool = [
+    { icon: '🐦', name: 'Bird', audioSrc: '/sounds/bird.mp3', soundHint: 'Chirping & Whistling' },
+    { icon: '🐶', name: 'Dog', audioSrc: '/sounds/dog.mp3', soundHint: 'Barking' },
+    { icon: '🔔', name: 'Bell', audioSrc: '/sounds/bell.mp3', soundHint: 'Ringing Chime' },
+    { icon: '🌧️', name: 'Rain', audioSrc: '/sounds/rain.mp3', soundHint: 'Heavy Rainstorm' },
+    { icon: '🚗', name: 'Car', audioSrc: '/sounds/car.mp3', soundHint: 'V8 Engine Rev' },
+    { icon: '🐄', name: 'Cow', audioSrc: '/sounds/cow.mp3', soundHint: 'Mooing' }
+  ];
+
+  // Helper to duck background music volume while playing game sounds
+  const duckBackgroundAudio = () => {
+    try {
+      const audios = document.querySelectorAll('audio');
+      audios.forEach(a => {
+        if (!a.dataset.prevVol) a.dataset.prevVol = a.volume.toString();
+        a.volume = isMuted ? 0 : 0.05; // Drop significantly so sound effect is distinct
+      });
+    } catch (e) {}
   };
 
-  const handleGuess = (val) => {
-    if (val === target.name) {
-      processTelemetry('SoundGuess', 1000, 0, (Date.now() - startTime)/1000);
-      setPhase('result');
+  const restoreBackgroundAudio = () => {
+    try {
+      const audios = document.querySelectorAll('audio');
+      audios.forEach(a => {
+        const prev = parseFloat(a.dataset.prevVol);
+        a.volume = isMuted ? 0 : (!isNaN(prev) ? prev : 1.0);
+        delete a.dataset.prevVol;
+      });
+    } catch (e) {}
+  };
+
+  const stopAllAudio = () => {
+    if (playbackTimeoutRef.current) {
+      clearTimeout(playbackTimeoutRef.current);
+      playbackTimeoutRef.current = null;
+    }
+    if (activeAudioFileRef.current) {
+      try {
+        activeAudioFileRef.current.pause();
+        activeAudioFileRef.current.currentTime = 0;
+      } catch (e) {}
+      activeAudioFileRef.current = null;
+    }
+    if (activeAudioCtxRef.current) {
+      try {
+        activeAudioCtxRef.current.close();
+      } catch (e) {}
+      activeAudioCtxRef.current = null;
+    }
+    setIsPlaying(false);
+    restoreBackgroundAudio();
+  };
+
+  const toggleMute = () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+
+    if (nextMuted) {
+      stopAllAudio();
+      document.querySelectorAll('audio').forEach(a => {
+        a.muted = true;
+      });
     } else {
-      processTelemetry('SoundGuess', 1000, 1, (Date.now() - startTime)/1000);
+      document.querySelectorAll('audio').forEach(a => {
+        a.muted = false;
+        a.volume = 1.0;
+      });
     }
   };
 
+  // Restore audio on unmount
+  useEffect(() => {
+    return () => {
+      stopAllAudio();
+      document.querySelectorAll('audio').forEach(a => {
+        a.muted = false;
+        a.volume = 1.0;
+      });
+    };
+  }, []);
+
+  // Update currentLevel tracker when parent level changes, without resetting active round
+  useEffect(() => {
+    if (level) setCurrentLevel(level);
+  }, [level]);
+
+  // Authentic Web Audio API Synthesizers for nature, animal, rain, and V8 engine sounds
+  const playAcousticSound = (name) => {
+    if (isMuted) return;
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      activeAudioCtxRef.current = ctx;
+
+      if (name === 'Bird') {
+        const now = ctx.currentTime;
+        [0, 0.18, 0.40, 0.65].forEach((t, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(2800 + (i % 2) * 500, now + t);
+          osc.frequency.exponentialRampToValueAtTime(4400, now + t + 0.1);
+          gain.gain.setValueAtTime(0, now + t);
+          gain.gain.linearRampToValueAtTime(0.25, now + t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.12);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + t);
+          osc.stop(now + t + 0.13);
+        });
+      } else if (name === 'Dog') {
+        const now = ctx.currentTime;
+        [0, 0.35].forEach(t => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(320, now + t);
+          osc.frequency.exponentialRampToValueAtTime(140, now + t + 0.18);
+          gain.gain.setValueAtTime(0, now + t);
+          gain.gain.linearRampToValueAtTime(0.3, now + t + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.22);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + t);
+          osc.stop(now + t + 0.23);
+        });
+      } else if (name === 'Bell') {
+        const now = ctx.currentTime;
+        [1046, 2093, 3135].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.28 / (i + 1), now);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 1.8);
+        });
+      } else if (name === 'Rain') {
+        // High-powered, immersive heavy rainstorm with deep atmospheric rumble and droplet impacts
+        const now = ctx.currentTime;
+        const duration = 2.4;
+
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.5, now);
+        masterGain.connect(ctx.destination);
+
+        // 1. Heavy rainfall spray (Pink/White noise with wide bandpass)
+        const bufferSize = ctx.sampleRate * duration;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let lastOut = 0.0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          lastOut = (lastOut * 0.95) + (white * 0.05);
+          data[i] = lastOut * 4.0;
+        }
+        const rainNoise = ctx.createBufferSource();
+        rainNoise.buffer = buffer;
+
+        const rainFilter = ctx.createBiquadFilter();
+        rainFilter.type = 'bandpass';
+        rainFilter.frequency.setValueAtTime(2400, now);
+        rainFilter.Q.setValueAtTime(0.8, now);
+
+        const rainGain = ctx.createGain();
+        rainGain.gain.setValueAtTime(0.08, now);
+        rainGain.gain.linearRampToValueAtTime(0.42, now + 0.3);
+        rainGain.gain.setValueAtTime(0.42, now + duration - 0.4);
+        rainGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        rainNoise.connect(rainFilter);
+        rainFilter.connect(rainGain);
+        rainGain.connect(masterGain);
+        rainNoise.start(now);
+        rainNoise.stop(now + duration);
+
+        // 2. Individual heavy raindrops hitting surfaces
+        [0.08, 0.24, 0.42, 0.60, 0.82, 1.05, 1.28, 1.52, 1.78, 2.02].forEach((t, i) => {
+          const dropOsc = ctx.createOscillator();
+          const dropGain = ctx.createGain();
+          dropOsc.type = 'sine';
+          const dropFreq = 1500 + (Math.sin(i * 1.8) * 450);
+          dropOsc.frequency.setValueAtTime(dropFreq, now + t);
+          dropOsc.frequency.exponentialRampToValueAtTime(dropFreq * 0.5, now + t + 0.06);
+          dropGain.gain.setValueAtTime(0.12, now + t);
+          dropGain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.06);
+          dropOsc.connect(dropGain);
+          dropGain.connect(masterGain);
+          dropOsc.start(now + t);
+          dropOsc.stop(now + t + 0.07);
+        });
+
+        // 3. Low thunderous storm rumble
+        const rumbleBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const rData = rumbleBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          rData[i] = (Math.random() * 2 - 1) * 0.5;
+        }
+        const rumbleSource = ctx.createBufferSource();
+        rumbleSource.buffer = rumbleBuffer;
+        const rumbleFilter = ctx.createBiquadFilter();
+        rumbleFilter.type = 'lowpass';
+        rumbleFilter.frequency.setValueAtTime(350, now);
+        const rumbleGain = ctx.createGain();
+        rumbleGain.gain.setValueAtTime(0.05, now);
+        rumbleGain.gain.linearRampToValueAtTime(0.3, now + 0.4);
+        rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        rumbleSource.connect(rumbleFilter);
+        rumbleFilter.connect(rumbleGain);
+        rumbleGain.connect(masterGain);
+        rumbleSource.start(now);
+        rumbleSource.stop(now + duration);
+      } else if (name === 'Car') {
+        // Deep throaty V8 / Inline-6 engine acceleration & throttle roar
+        const now = ctx.currentTime;
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.42, now);
+        masterGain.connect(ctx.destination);
+
+        // V8 crossplane firing order fundamental frequencies
+        const baseFreqs = [50, 75, 100, 150];
+        baseFreqs.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const oscGain = ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+
+          // Throttle acceleration: idle -> high RPM rev -> shift -> final rev roar -> decel
+          osc.frequency.setValueAtTime(freq, now);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.9, now + 0.45); // First hard rev
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.4, now + 0.75); // Gear shift drop
+          osc.frequency.exponentialRampToValueAtTime(freq * 2.5, now + 1.3);  // V8 full roar!
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.95, now + 2.1); // Idle down
+
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.Q.setValueAtTime(3.5, now);
+          filter.frequency.setValueAtTime(300, now);
+          filter.frequency.linearRampToValueAtTime(1500, now + 0.45);
+          filter.frequency.linearRampToValueAtTime(950, now + 0.75);
+          filter.frequency.linearRampToValueAtTime(2400, now + 1.3);
+          filter.frequency.exponentialRampToValueAtTime(380, now + 2.1);
+
+          oscGain.gain.setValueAtTime(0.02, now);
+          oscGain.gain.linearRampToValueAtTime(0.28 / (idx + 1), now + 0.1);
+          oscGain.gain.setValueAtTime(0.32 / (idx + 1), now + 1.3);
+          oscGain.gain.exponentialRampToValueAtTime(0.001, now + 2.2);
+
+          osc.connect(filter);
+          filter.connect(oscGain);
+          oscGain.connect(masterGain);
+
+          osc.start(now);
+          osc.stop(now + 2.2);
+        });
+
+        // Throaty exhaust rumble & intake air rush
+        const bufferSize = ctx.sampleRate * 2.2;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1);
+        }
+        const exhaustNoise = ctx.createBufferSource();
+        exhaustNoise.buffer = buffer;
+        const exhaustFilter = ctx.createBiquadFilter();
+        exhaustFilter.type = 'bandpass';
+        exhaustFilter.frequency.setValueAtTime(200, now);
+        exhaustFilter.frequency.linearRampToValueAtTime(550, now + 1.3);
+        exhaustFilter.Q.setValueAtTime(2.5, now);
+
+        const exhaustGain = ctx.createGain();
+        exhaustGain.gain.setValueAtTime(0.03, now);
+        exhaustGain.gain.linearRampToValueAtTime(0.18, now + 0.45);
+        exhaustGain.gain.linearRampToValueAtTime(0.26, now + 1.3);
+        exhaustGain.gain.exponentialRampToValueAtTime(0.001, now + 2.2);
+
+        exhaustNoise.connect(exhaustFilter);
+        exhaustFilter.connect(exhaustGain);
+        exhaustGain.connect(masterGain);
+        exhaustNoise.start(now);
+        exhaustNoise.stop(now + 2.2);
+      } else if (name === 'Cow') {
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.linearRampToValueAtTime(190, now + 0.4);
+        osc.frequency.exponentialRampToValueAtTime(130, now + 1.2);
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(0.35, now + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 1.3);
+      }
+    } catch (e) {
+      // Audio fallback
+    }
+  };
+
+  const setupRound = (lvl = currentLevel) => {
+    stopAllAudio();
+    const roundLvl = lvl || 1;
+    const count = roundLvl === 1 ? 2 : roundLvl === 2 ? 3 : 4;
+    const opts = shuffle(pool).slice(0, count);
+    const chosen = opts[Math.floor(Math.random() * opts.length)];
+    setOptions(opts);
+    setTarget(chosen);
+    setFeedback(null);
+    setIsPlaying(false);
+    setStartTime(Date.now());
+    setPhase('play');
+    restoreBackgroundAudio();
+  };
+
+  useEffect(() => {
+    setupRound(level);
+  }, []);
+
+  const triggerSoundPlayback = (callback) => {
+    if (!target) return;
+    stopAllAudio();
+    if (isMuted) return;
+
+    setIsPlaying(true);
+    duckBackgroundAudio();
+
+    let finished = false;
+    const onDone = () => {
+      if (finished) return;
+      finished = true;
+      restoreBackgroundAudio();
+      setIsPlaying(false);
+      if (playbackTimeoutRef.current) {
+        clearTimeout(playbackTimeoutRef.current);
+        playbackTimeoutRef.current = null;
+      }
+      if (callback) callback();
+    };
+
+    // If an audio file exists in public/sounds/, play the real studio recording
+    if (target.audioSrc) {
+      try {
+        const audio = new Audio(target.audioSrc);
+        activeAudioFileRef.current = audio;
+        audio.volume = 1.0;
+
+        audio.onended = () => {
+          onDone();
+        };
+
+        audio.onerror = () => {
+          activeAudioFileRef.current = null;
+          playAcousticSound(target.name);
+          playbackTimeoutRef.current = setTimeout(onDone, 2400);
+        };
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            // If play fails, fall back to synthesizer
+            activeAudioFileRef.current = null;
+            playAcousticSound(target.name);
+            playbackTimeoutRef.current = setTimeout(onDone, 2400);
+          });
+        }
+
+        // Generous safety timeout so clips never get cut off early
+        playbackTimeoutRef.current = setTimeout(() => {
+          if (activeAudioFileRef.current && !activeAudioFileRef.current.paused) {
+            activeAudioFileRef.current.pause();
+          }
+          onDone();
+        }, 12000);
+        return;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
+    // Default synthesis
+    playAcousticSound(target.name);
+    playbackTimeoutRef.current = setTimeout(onDone, 2400);
+  };
+
+  const handleInitialListen = () => {
+    triggerSoundPlayback(() => {
+      setPhase('guess');
+    });
+  };
+
+  const handleGuess = (val) => {
+    if (feedback !== null) return; // Prevent double taps during feedback state
+
+    stopAllAudio();
+    const isCorrect = val === target.name;
+    setFeedback({ selected: val, isCorrect });
+
+    if (isCorrect) {
+      if (!isMuted) {
+        playTone(520);
+        setTimeout(() => playTone(660), 120);
+      }
+      setTimeout(() => {
+        processTelemetry('SoundGuess', 1000, 0, (Date.now() - startTime) / 1000);
+        setPhase('result');
+      }, 1600);
+    } else {
+      if (!isMuted) playTone(220);
+      setTimeout(() => {
+        processTelemetry('SoundGuess', 1000, 1, (Date.now() - startTime) / 1000);
+        setPhase('result');
+      }, 2200);
+    }
+  };
+
+  const handleExit = () => {
+    stopAllAudio();
+    onBack();
+  };
+
   return (
-    <PageContainer title="Sound Guess" level={level}>
-      {phase === 'play' && (
-        <div className="text-center mt-10 w-full">
-          <button onClick={playSound} className="mx-auto p-10 bg-indigo-100 rounded-full mb-8 animate-pulse shadow-lg border-4 border-indigo-200">
-            <Volume2 className="w-20 h-20 text-indigo-600" />
+    <PageContainer title="Sound Guess" level={currentLevel}>
+      {/* Top Game Navigation Bar: Back/Exit, Mute/Stop, and Help */}
+      <div className="w-full flex justify-between items-center mb-4 max-w-md">
+        <button
+          onClick={handleExit}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-900 hover:bg-indigo-50 font-semibold text-sm shadow-sm transition"
+          aria-label="Exit Game"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Exit</span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          {/* Mute Button to Stop / Silence Audio */}
+          <button
+            onClick={toggleMute}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-semibold text-sm shadow-sm transition ${
+              isMuted 
+                ? 'bg-red-50 border-red-300 text-red-700 hover:bg-red-100' 
+                : 'bg-white border-indigo-200 text-indigo-900 hover:bg-indigo-50'
+            }`}
+            title={isMuted ? "Unmute Sound" : "Mute Sound"}
+            aria-label="Toggle Mute"
+          >
+            {isMuted ? (
+              <svg className="w-4 h-4 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <Volume2 className="w-4 h-4 text-indigo-600" />
+            )}
+            <span>{isMuted ? 'Muted' : 'Mute'}</span>
           </button>
-          <p className="font-bold text-xl text-indigo-900">Tap to listen to the sound</p>
+
+          <button
+            onClick={() => setShowHelp(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-900 hover:bg-indigo-50 font-semibold text-sm shadow-sm transition"
+            aria-label="Game Instructions"
+          >
+            <HelpCircle className="w-4 h-4 text-indigo-600" />
+            <span>Help</span>
+          </button>
         </div>
-      )}
-      {phase === 'guess' && (
-        <div className="text-center w-full">
-          <p className="text-2xl font-bold mb-8 text-indigo-900">What sound did you hear?</p>
-          <div className="flex flex-wrap gap-4 justify-center">
-            {options.map((opt, i) => (
-              <button key={i} onClick={() => handleGuess(opt.name)} className="text-6xl p-6 bg-white rounded-2xl shadow hover:bg-indigo-100 border-2 hover:border-indigo-400 w-32 h-32 flex justify-center items-center">{opt.icon}</button>
-            ))}
+      </div>
+
+      {/* Help / Tutorial Modal */}
+      {showHelp && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-indigo-100">
+            <div className="flex items-center gap-2 mb-3 text-indigo-900">
+              <HelpCircle className="w-6 h-6 text-indigo-600" />
+              <h3 className="text-xl font-bold">How to Play Sound Guess</h3>
+            </div>
+            <div className="space-y-3 text-sm text-slate-700 mb-6">
+              <p className="flex items-start gap-2">
+                <span className="font-bold text-indigo-700 bg-indigo-100 rounded-full w-5 h-5 flex items-center justify-center shrink-0">1</span>
+                <span><strong>Listen:</strong> Tap the big speaker button to hear the sound effect. Background music lowers so you can hear clearly!</span>
+              </p>
+              <p className="flex items-start gap-2">
+                <span className="font-bold text-indigo-700 bg-indigo-100 rounded-full w-5 h-5 flex items-center justify-center shrink-0">2</span>
+                <span><strong>Guess:</strong> Choose the animal or vehicle that makes that sound. You can tap "Listen Again" anytime!</span>
+              </p>
+              <p className="flex items-start gap-2">
+                <span className="font-bold text-indigo-700 bg-indigo-100 rounded-full w-5 h-5 flex items-center justify-center shrink-0">3</span>
+                <span><strong>Controls:</strong> Use the <strong>Mute</strong> button at the top or <strong>Stop</strong> button anytime to silence audio immediately.</span>
+              </p>
+            </div>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition"
+            >
+              Got it, let's play!
+            </button>
           </div>
         </div>
       )}
+
+      {/* 1. PLAY PHASE */}
+      {phase === 'play' && (
+        <div className="text-center mt-6 w-full max-w-md flex flex-col items-center">
+          <button 
+            onClick={handleInitialListen} 
+            disabled={isPlaying}
+            className={`p-10 rounded-full mb-6 shadow-xl border-4 transition-all transform active:scale-95 ${
+              isPlaying 
+                ? 'bg-indigo-600 border-indigo-300 scale-105 animate-pulse text-white' 
+                : 'bg-indigo-100 border-indigo-200 text-indigo-600 hover:bg-indigo-200'
+            }`}
+          >
+            <Volume2 className="w-20 h-20" />
+          </button>
+          <p className="font-bold text-xl text-indigo-900 mb-2">
+            {isPlaying ? 'Listening closely...' : 'Tap to listen to the sound'}
+          </p>
+          <p className="text-sm text-slate-500 font-medium mb-4">
+            {isPlaying ? 'Background music has been lowered for you' : 'Press the speaker button above'}
+          </p>
+
+          {/* Immediate Stop Button while playing */}
+          {isPlaying && (
+            <button
+              onClick={stopAllAudio}
+              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-sm rounded-full border border-red-300 flex items-center gap-1.5 shadow-sm transition"
+            >
+              <span>⏹</span>
+              <span>Stop Audio</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 2. GUESS PHASE */}
+      {phase === 'guess' && target && (
+        <div className="text-center w-full max-w-md">
+          {/* Prominent Correct / Incorrect Status Banner */}
+          {feedback && (
+            <div className={`mb-4 p-3 rounded-xl font-bold text-center flex items-center justify-center gap-2 shadow-sm ${
+              feedback.isCorrect 
+                ? 'bg-emerald-100 border-2 border-emerald-500 text-emerald-900' 
+                : 'bg-amber-100 border-2 border-amber-400 text-amber-900'
+            }`}>
+              {feedback.isCorrect ? (
+                <>
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                  <span className="text-base">Correct! You recognized the sound!</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl">💡</span>
+                  <span className="text-base">Not quite! The sound was {target.icon} {target.name}.</span>
+                </>
+              )}
+            </div>
+          )}
+
+          <p className="text-2xl font-black mb-2 text-indigo-950">What sound did you hear?</p>
+          
+          {/* Re-listen & Stop Buttons */}
+          <div className="mb-6 flex justify-center items-center gap-2">
+            <button
+              onClick={() => triggerSoundPlayback()}
+              disabled={isPlaying || feedback !== null}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-sm border shadow-sm transition ${
+                isPlaying 
+                  ? 'bg-indigo-600 text-white border-indigo-600 animate-pulse' 
+                  : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+              }`}
+            >
+              <Volume2 className="w-4 h-4" />
+              <span>{isPlaying ? 'Playing Sound...' : '🔊 Listen Again'}</span>
+            </button>
+
+            {isPlaying && (
+              <button
+                onClick={stopAllAudio}
+                className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold text-sm rounded-full border border-red-300 flex items-center gap-1 shadow-sm transition"
+              >
+                <span>⏹</span>
+                <span>Stop</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-4 justify-center">
+            {options.map((opt, i) => {
+              const isSelected = feedback?.selected === opt.name;
+              const isTarget = opt.name === target.name;
+              const isSuccess = isSelected && feedback?.isCorrect;
+              const isFail = isSelected && !feedback?.isCorrect;
+              const revealCorrect = feedback && !feedback.isCorrect && isTarget;
+
+              return (
+                <button 
+                  key={i} 
+                  disabled={feedback !== null || isPlaying}
+                  onClick={() => handleGuess(opt.name)} 
+                  className={`p-5 rounded-2xl shadow-md border-2 w-32 h-36 flex flex-col justify-center items-center transition-all ${
+                    isSuccess ? 'border-4 border-emerald-500 bg-emerald-50 scale-105 shadow-lg' :
+                    isFail ? 'border-4 border-red-400 bg-red-50 opacity-90' :
+                    revealCorrect ? 'border-4 border-emerald-400 bg-emerald-50 animate-pulse scale-105' :
+                    feedback !== null ? 'bg-white opacity-40 border-slate-200' :
+                    'bg-white border-indigo-100 hover:border-indigo-400 hover:bg-indigo-50/50 active:scale-95'
+                  }`}
+                >
+                  <span className="text-5xl mb-2">{opt.icon}</span>
+                  <span className="text-sm font-bold text-slate-800">{opt.name}</span>
+                  {revealCorrect && (
+                    <span className="text-[10px] font-extrabold text-emerald-700 mt-1">Correct Sound</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3. RESULT PHASE (Replaces broken single emoji with full score card) */}
       {phase === 'result' && (
-         <div className="text-center mt-10">
-           <div className="text-8xl mb-8">🎶</div>
-         </div>
+        <div className="text-center mt-6 max-w-sm w-full bg-white p-6 rounded-2xl shadow-xl border border-indigo-100 animate-fade-in">
+          <div className="text-7xl mb-3">
+            {feedback?.isCorrect ? '🏆' : '🎶'}
+          </div>
+          <h3 className="text-2xl font-black text-indigo-950 mb-1">
+            {feedback?.isCorrect ? 'Superb Listening!' : 'Good Effort!'}
+          </h3>
+          <p className="text-sm text-slate-600 mb-6 font-medium">
+            {feedback?.isCorrect 
+              ? `You correctly identified the ${target?.name} sound!` 
+              : `The sound was ${target?.icon} ${target?.name}. Regular auditory exercises keep your hearing and memory sharp!`}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => setupRound(currentLevel)} 
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl text-base shadow-md transition"
+            >
+              Play Next Round
+            </button>
+            <button 
+              onClick={handleExit} 
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3.5 rounded-xl text-base transition"
+            >
+              Back to Game Suite
+            </button>
+          </div>
+        </div>
       )}
     </PageContainer>
   );
