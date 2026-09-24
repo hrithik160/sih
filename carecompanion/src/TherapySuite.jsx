@@ -59,85 +59,331 @@ const NatureRecallGame = ({ onBack, level, processTelemetry }) => {
   const [target, setTarget] = useState(null);
   const [options, setOptions] = useState([]);
   const [questionType, setQuestionType] = useState('seen'); // 'seen' or 'position'
-  const [startTime] = useState(Date.now());
+  const [startTime, setStartTime] = useState(Date.now());
+  const [showHelp, setShowHelp] = useState(false);
+  const [feedback, setFeedback] = useState(null); // { selected: any, isCorrect: boolean }
+  const [timeLeft, setTimeLeft] = useState(level === 1 ? 5 : level === 2 ? 4 : 3);
+  const [totalTime, setTotalTime] = useState(level === 1 ? 5 : level === 2 ? 4 : 3);
+  const [currentLevel, setCurrentLevel] = useState(level);
   
+  // Expanded pool of 12 distinct nature items so distractors are genuinely unshown
   const pool = [
     { icon: '🦏', name: 'Rhino' }, { icon: '🐦', name: 'Hornbill' }, 
     { icon: '🌸', name: 'Orchid' }, { icon: '🦌', name: 'Sangai' },
-    { icon: '🐼', name: 'Red Panda' }, { icon: '🌿', name: 'Plant' }
+    { icon: '🐼', name: 'Red Panda' }, { icon: '🌿', name: 'Plant' },
+    { icon: '🐅', name: 'Tiger' }, { icon: '🐘', name: 'Elephant' },
+    { icon: '🦋', name: 'Butterfly' }, { icon: '🌻', name: 'Sunflower' },
+    { icon: '🐒', name: 'Langur' }, { icon: '🦜', name: 'Parrot' }
   ];
 
-  useEffect(() => {
-    const count = level === 1 ? 3 : level === 2 ? 5 : 6;
+  const setupRound = (lvl = currentLevel) => {
+    const roundLvl = lvl || 1;
+    const count = roundLvl === 1 ? 3 : roundLvl === 2 ? 4 : 6;
     const selected = shuffle(pool).slice(0, count);
     setItems(selected);
     const chosen = selected[Math.floor(Math.random() * selected.length)];
     setTarget(chosen);
+    setFeedback(null);
+    setStartTime(Date.now());
     
-    const qType = Math.random() > 0.5 && level > 1 ? 'position' : 'seen';
+    const initialTime = roundLvl === 1 ? 5 : roundLvl === 2 ? 4 : 3;
+    setTimeLeft(initialTime);
+    setTotalTime(initialTime);
+    setPhase('observe');
+
+    const qType = Math.random() > 0.5 && roundLvl > 1 ? 'position' : 'seen';
     setQuestionType(qType);
     
     if (qType === 'seen') {
-      let opts = [chosen];
-      while(opts.length < 3) {
-        const r = pool[Math.floor(Math.random() * pool.length)];
-        if(!opts.includes(r)) opts.push(r);
-      }
-      setOptions(shuffle(opts));
+      // Pick genuine distractors that were NOT shown in the selected list
+      const unselected = pool.filter(p => !selected.some(s => s.name === p.name));
+      const shuffledDistractors = shuffle(unselected).slice(0, 2);
+      const opts = shuffle([chosen, ...shuffledDistractors]);
+      setOptions(opts);
     } else {
-      setOptions([0, 1, 2, 3, 4, 5].slice(0, count));
+      setOptions(Array.from({ length: count }, (_, i) => i));
     }
-    
-    setTimeout(() => setPhase('question'), level === 1 ? 5000 : level === 2 ? 4000 : 3000);
+  };
+
+  // Only start on mount to prevent mid-game state wipes when parent updates gameLevels
+  useEffect(() => {
+    setupRound(level);
+  }, []);
+
+  // Update currentLevel tracker when parent level changes, without resetting active round
+  useEffect(() => {
+    if (level) setCurrentLevel(level);
   }, [level]);
 
+  // Observation phase countdown timer
+  useEffect(() => {
+    if (phase !== 'observe') return;
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setPhase('question');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [phase]);
+
   const handleGuess = (guess) => {
+    if (feedback !== null) return; // Prevent double taps during feedback state
+
     let isCorrect = false;
-    if (questionType === 'seen') isCorrect = guess.name === target.name;
-    else isCorrect = items.indexOf(target) === guess;
-    
-    if (isCorrect) {
-      processTelemetry('NatureRecall', 1000, 0, (Date.now() - startTime)/1000);
-      setPhase('result');
+    if (questionType === 'seen') {
+      isCorrect = guess.name === target.name;
     } else {
-      processTelemetry('NatureRecall', 1000, 1, (Date.now() - startTime)/1000);
+      const targetIndex = items.findIndex(it => it.name === target.name);
+      isCorrect = guess === targetIndex;
+    }
+    
+    const targetIdx = items.findIndex(it => it.name === target.name);
+    setFeedback({ 
+      selected: guess, 
+      isCorrect, 
+      target, 
+      targetIndex: targetIdx 
+    });
+
+    if (isCorrect) {
+      playTone(520);
+      setTimeout(() => playTone(660), 120);
+      setTimeout(() => {
+        processTelemetry('NatureRecall', 1000, 0, (Date.now() - startTime) / 1000);
+        setPhase('result');
+      }, 1600);
+    } else {
+      playTone(220);
+      setTimeout(() => {
+        processTelemetry('NatureRecall', 1000, 1, (Date.now() - startTime) / 1000);
+        setPhase('result');
+      }, 2200);
     }
   };
 
   return (
-    <PageContainer title="Nature Recall" level={level}>
-      {phase === 'observe' && (
-        <div className="grid grid-cols-2 gap-4 w-full">
-          {items.map((it, i) => <div key={i} className="text-6xl p-4 bg-white rounded-xl shadow flex justify-center items-center h-32">{it.icon}</div>)}
+    <PageContainer title="Nature Recall" level={currentLevel}>
+      {/* Top Game Navigation Bar: Always accessible Back/Exit & Help */}
+      <div className="w-full flex justify-between items-center mb-4 max-w-md">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-semibold text-sm shadow-sm transition"
+          aria-label="Exit Game"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Exit Game</span>
+        </button>
+
+        <button
+          onClick={() => setShowHelp(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-semibold text-sm shadow-sm transition"
+          aria-label="Game Instructions"
+        >
+          <HelpCircle className="w-4 h-4 text-emerald-600" />
+          <span>How to Play</span>
+        </button>
+      </div>
+
+      {/* Help / Tutorial Modal */}
+      {showHelp && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-emerald-100">
+            <div className="flex items-center gap-2 mb-3 text-emerald-800">
+              <HelpCircle className="w-6 h-6 text-emerald-600" />
+              <h3 className="text-xl font-bold">How to Play</h3>
+            </div>
+            <div className="space-y-3 text-sm text-slate-700 mb-6">
+              <p className="flex items-start gap-2">
+                <span className="font-bold text-emerald-700 bg-emerald-100 rounded-full w-5 h-5 flex items-center justify-center shrink-0">1</span>
+                <span><strong>Observe:</strong> Memorize the nature items and their locations before the cards disappear.</span>
+              </p>
+              <p className="flex items-start gap-2">
+                <span className="font-bold text-emerald-700 bg-emerald-100 rounded-full w-5 h-5 flex items-center justify-center shrink-0">2</span>
+                <span><strong>Recall:</strong> Answer the question by picking the item that was shown or identifying its position.</span>
+              </p>
+              <p className="flex items-start gap-2">
+                <span className="font-bold text-emerald-700 bg-emerald-100 rounded-full w-5 h-5 flex items-center justify-center shrink-0">3</span>
+                <span><strong>Practice:</strong> Exercising visual recall boosts cognitive focus and memory retention!</span>
+              </p>
+            </div>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition"
+            >
+              Got it, let's play!
+            </button>
+          </div>
         </div>
       )}
+
+      {/* 1. OBSERVE PHASE */}
+      {phase === 'observe' && (
+        <div className="w-full max-w-md flex flex-col items-center">
+          <div className="mb-3 text-center">
+            <p className="text-base font-bold text-emerald-900">Memorize these items!</p>
+            <p className="text-xs font-semibold text-emerald-700">Cards hide in {timeLeft}s</p>
+          </div>
+
+          {/* Progress bar countdown */}
+          <div className="w-full bg-emerald-200 h-2 rounded-full mb-4 overflow-hidden">
+            <div 
+              className="bg-emerald-600 h-full transition-all duration-1000 ease-linear rounded-full"
+              style={{ width: `${(timeLeft / totalTime) * 100}%` }}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full">
+            {items.map((it, i) => (
+              <div 
+                key={i} 
+                className="relative bg-white rounded-xl shadow border border-emerald-100 flex flex-col justify-center items-center h-28 p-2"
+              >
+                <span className="absolute top-1.5 left-2 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                  #{i + 1}
+                </span>
+                <span className="text-5xl">{it.icon}</span>
+                <span className="text-xs font-bold text-slate-600 mt-1">{it.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 2. QUESTION PHASE */}
       {phase === 'question' && target && (
-        <div className="w-full text-center">
+        <div className="w-full max-w-md text-center">
+          {/* Prominent Correct / Incorrect Status Banner */}
+          {feedback && (
+            <div className={`mb-4 p-3 rounded-xl font-bold text-center flex items-center justify-center gap-2 shadow-sm ${
+              feedback.isCorrect 
+                ? 'bg-emerald-100 border-2 border-emerald-500 text-emerald-900' 
+                : 'bg-amber-100 border-2 border-amber-400 text-amber-900'
+            }`}>
+              {feedback.isCorrect ? (
+                <>
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+                  <span className="text-base">Correct! Excellent memory!</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xl">💡</span>
+                  <span className="text-base">Not quite! The correct answer was {target.icon} {target.name}.</span>
+                </>
+              )}
+            </div>
+          )}
+
           {questionType === 'seen' ? (
             <>
-              <p className="text-xl mb-6 font-bold text-emerald-800">Did you see the {target.name}?</p>
-              <div className="flex justify-center gap-4 flex-wrap">
-                 {options.map((opt, i) => (
-                    <button key={i} onClick={() => handleGuess(opt)} className="text-5xl bg-white p-6 rounded-xl shadow hover:bg-emerald-100 h-32 w-32 flex justify-center items-center">{opt.icon}</button>
-                 ))}
+              <p className="text-lg mb-4 font-bold text-emerald-900">
+                Which of these did you see earlier?
+              </p>
+              <div className="flex justify-center gap-3 flex-wrap">
+                {options.map((opt, i) => {
+                  const isSelected = feedback?.selected?.name === opt.name;
+                  const isTarget = opt.name === target.name;
+                  const isSuccess = isSelected && feedback?.isCorrect;
+                  const isFail = isSelected && !feedback?.isCorrect;
+                  const revealCorrect = feedback && !feedback.isCorrect && isTarget;
+
+                  return (
+                    <button 
+                      key={i} 
+                      disabled={feedback !== null}
+                      onClick={() => handleGuess(opt)} 
+                      className={`text-5xl p-4 rounded-xl shadow-md border-2 h-28 w-28 flex flex-col justify-center items-center transition-all ${
+                        isSuccess ? 'border-4 border-emerald-500 bg-emerald-50 scale-105 shadow-lg' :
+                        isFail ? 'border-4 border-red-400 bg-red-50 opacity-90' :
+                        revealCorrect ? 'border-4 border-emerald-400 bg-emerald-50 animate-pulse' :
+                        feedback !== null ? 'bg-white opacity-40 border-slate-200' :
+                        'bg-white border-emerald-100 hover:border-emerald-400 hover:bg-emerald-50/50 active:scale-95'
+                      }`}
+                    >
+                      <span>{opt.icon}</span>
+                      <span className="text-xs font-bold text-slate-700 mt-1">{opt.name}</span>
+                      {revealCorrect && (
+                        <span className="text-[10px] font-extrabold text-emerald-700 mt-0.5">Answer</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </>
           ) : (
             <>
-              <p className="text-xl mb-6 font-bold text-emerald-800">Where was the {target.icon} {target.name}?</p>
-              <div className="grid grid-cols-2 gap-4 w-full">
-                {items.map((_, i) => (
-                   <button key={i} onClick={() => handleGuess(i)} className="text-3xl bg-white p-4 rounded-xl shadow hover:bg-emerald-100 h-32 flex justify-center items-center font-bold text-slate-300">Position {i+1}</button>
-                ))}
+              <p className="text-lg mb-4 font-bold text-emerald-900">
+                Where was the {target.icon} <span className="underline decoration-emerald-500">{target.name}</span> located?
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full">
+                {items.map((_, i) => {
+                  const isSelected = feedback?.selected === i;
+                  const isTarget = i === feedback?.targetIndex;
+                  const isSuccess = isSelected && feedback?.isCorrect;
+                  const isFail = isSelected && !feedback?.isCorrect;
+                  const revealCorrect = feedback && !feedback.isCorrect && isTarget;
+
+                  return (
+                    <button 
+                      key={i} 
+                      disabled={feedback !== null}
+                      onClick={() => handleGuess(i)} 
+                      className={`p-4 rounded-xl shadow-md border-2 h-24 flex flex-col justify-center items-center font-bold transition-all ${
+                        isSuccess ? 'border-4 border-emerald-500 bg-emerald-100 text-emerald-900 scale-105' :
+                        isFail ? 'border-4 border-red-400 bg-red-50 text-red-700 opacity-90' :
+                        revealCorrect ? 'border-4 border-emerald-400 bg-emerald-50 text-emerald-900 animate-pulse' :
+                        feedback !== null ? 'bg-white opacity-40 border-slate-200 text-slate-400' :
+                        'bg-white border-emerald-200 text-emerald-900 hover:bg-emerald-50 hover:border-emerald-400 active:scale-95'
+                      }`}
+                    >
+                      <span className="text-2xl font-black text-emerald-800">#{i + 1}</span>
+                      <span className="text-xs text-slate-600 font-semibold mt-0.5">Position {i + 1}</span>
+                      {revealCorrect && (
+                        <span className="text-[10px] font-extrabold text-emerald-700">Correct Location</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
         </div>
       )}
+
+      {/* 3. RESULT PHASE */}
       {phase === 'result' && (
-        <div className="text-center mt-10">
-          <div className="text-8xl mb-8">🏆</div>
-          <button onClick={onBack} className="bg-emerald-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
+        <div className="text-center mt-6 max-w-sm w-full bg-white p-6 rounded-2xl shadow-lg border border-emerald-100 animate-fade-in">
+          <div className="text-7xl mb-3">
+            {feedback?.isCorrect ? '🏆' : '🌟'}
+          </div>
+          <h3 className="text-2xl font-black text-emerald-900 mb-1">
+            {feedback?.isCorrect ? 'Excellent Recall!' : 'Good Effort!'}
+          </h3>
+          <p className="text-sm text-slate-600 mb-6 font-medium">
+            {feedback?.isCorrect 
+              ? 'You identified the item correctly! Your visual memory is sharp.' 
+              : `The target was ${target?.icon} ${target?.name}. Regular practice strengthens cognitive recall!`}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button 
+              onClick={() => setupRound(currentLevel)} 
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-base shadow transition"
+            >
+              Play Next Round
+            </button>
+            <button 
+              onClick={onBack} 
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-base transition"
+            >
+              Back to Game Suite
+            </button>
+          </div>
         </div>
       )}
     </PageContainer>
