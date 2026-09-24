@@ -13,13 +13,13 @@ import {
   ArrowLeft, Volume2, HelpCircle, MessageSquare, Leaf, Puzzle, 
   MessageCircle, Palette, Medal, Layout, Play, Rabbit, Music, 
   Lock, Brain, Smile, Pill, Stethoscope, Settings2, CheckCircle2, Map,
-  Coins, Ear, Compass, Bird, Mic, Dog
+  Coins, Ear, Compass, Bird, Mic, Dog, RotateCcw
 } from 'lucide-react';
 import { useT } from './LanguageContext';
 
 // Common styling
 const PageContainer = ({ title, level, children }) => (
-  <div className="p-6 h-full flex flex-col items-center bg-emerald-50 relative">
+  <div className="p-6 h-full flex flex-col items-center bg-emerald-50 relative min-h-screen">
     <div className="flex justify-between w-full mb-6">
       <h2 className="text-2xl font-black text-emerald-900">{title}</h2>
       <span className="bg-emerald-200 text-emerald-900 px-3 py-1 rounded-full text-xs font-bold">Level {level}</span>
@@ -30,6 +30,27 @@ const PageContainer = ({ title, level, children }) => (
 
 // Helper for shuffling
 const shuffle = (array) => [...array].sort(() => 0.5 - Math.random());
+
+// Audio feedback helper for dementia-friendly interaction
+const playTone = (freq = 440) => {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) {
+    // Ignore audio blocking
+  }
+};
 
 // 1. NATURE RECALL
 const NatureRecallGame = ({ onBack, level, processTelemetry }) => {
@@ -139,10 +160,9 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
   const [currentOrder, setCurrentOrder] = useState([]);
   const [startTime] = useState(Date.now());
   const [won, setWon] = useState(false);
-  const [qType, setQType] = useState('sequence'); // sequence or after
+  const [qType, setQType] = useState('sequence');
 
   useEffect(() => {
-    // Pick random indices and sort chronologically
     let indices = [];
     while (indices.length < count) {
       let r = Math.floor(Math.random() * fullRoutine.length);
@@ -171,7 +191,6 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
         setWon(true);
       } else {
         processTelemetry('DailyRoutine', 1000, 1, (Date.now() - startTime)/1000);
-        // Let them see their mistake briefly
         setTimeout(() => {
           setCurrentOrder([]);
           setShuffled(shuffle(targetRoutine));
@@ -184,13 +203,6 @@ const DailyRoutineGame = ({ onBack, level, processTelemetry }) => {
     const newOrder = currentOrder.filter(i => i !== item);
     setCurrentOrder(newOrder);
     setShuffled([...shuffled, item]);
-  };
-
-  const handleAfterGuess = (item) => {
-    // For 'after' questions, we ask what happens AFTER a specific event.
-    // Pick a random event from targetRoutine except the last one
-    // But since we didn't store the question target, let's keep it simple
-    // The previous code hardcoded targetIdx = 2. Let's fix that.
   };
 
   return (
@@ -567,9 +579,7 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
   const [selectedItems, setSelectedItems] = useState([]);
   
   useEffect(() => {
-    // Determine how many items to memorize based on AI Level
     const targetCount = level === 1 ? 4 : level === 2 ? 6 : 8;
-    // We want a bigger pool to choose from for the question phase
     const gridCount = level === 1 ? 8 : level === 2 ? 12 : 16;
     
     const shuffledItems = shuffle([...allItems]);
@@ -578,11 +588,8 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
     
     setTray(selectedTray);
     setDistractors(distractorItems);
-    
-    // Grid shown during question phase = target items + distractors, shuffled
     setOptionsGrid(shuffle([...selectedTray, ...distractorItems]));
     
-    // Give them time to memorize based on level
     const observeTime = level === 1 ? 6000 : level === 2 ? 5000 : 4000;
     setTimeout(() => setPhase('question'), observeTime);
   }, [level]);
@@ -596,7 +603,6 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
   };
 
   const submitAnswers = () => {
-    // Calculate accuracy and points
     let correctCount = 0;
     let falsePositives = 0;
     
@@ -608,10 +614,7 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
     const missedCount = tray.length - correctCount;
     const totalErrors = falsePositives + missedCount;
     
-    // Send telemetry to update decision tree
-    // If they got all correct and no false positives, errors = 0
     processTelemetry('MemoryTray', 1000, totalErrors, (Date.now() - startTime)/1000);
-    
     setPhase('result');
   };
 
@@ -703,112 +706,1905 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
   );
 };
 
-// 5. CREATIVE CALM (Sandbox Coloring)
-const CreativeCalmGame = ({ onBack, level, processTelemetry }) => {
-  const [activeColor, setActiveColor] = useState('rgba(239, 68, 68, 0.5)'); // Semi-transparent
-  const [startTime] = useState(Date.now());
-  const canvasRef = React.useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  
-  const palette = [
-    'rgba(239, 68, 68, 0.5)', 'rgba(249, 115, 22, 0.5)', 'rgba(245, 158, 11, 0.5)', 'rgba(234, 179, 8, 0.5)', 
-    'rgba(132, 204, 22, 0.5)', 'rgba(34, 197, 94, 0.5)', 'rgba(6, 182, 212, 0.5)', 'rgba(59, 130, 246, 0.5)', 
-    'rgba(99, 102, 241, 0.5)', 'rgba(168, 85, 247, 0.5)', 'rgba(236, 72, 153, 0.5)', 'rgba(244, 63, 94, 0.5)'
+const CreativeCalmGame = ({ onExit }) => {
+  // ---------------------------------------------------------
+  // COLORS
+  // ---------------------------------------------------------
+  const COLORS = {
+    red: "#E53935",
+    green: "#43A047",
+    blue: "#1E88E5",
+    yellow: "#FDD835",
+    orange: "#FB8C00",
+    pink: "#EC407A",
+    brown: "#8D6E63",
+    purple: "#8E44AD",
+    lightBlue: "#81D4FA",
+    lightGreen: "#8BC34A",
+    white: "#FFFFFF",
+  };
+
+  // ---------------------------------------------------------
+  // 12 PICTURES
+  // ---------------------------------------------------------
+  const pictures = [
+    // =======================================================
+    // LEVEL 1
+    // =======================================================
+
+    {
+      id: 1,
+      level: 1,
+      title: "Simple Flower",
+      description: "Match the flower with the colored reference.",
+      regions: [
+        { id: "petals", name: "Flower", color: COLORS.pink },
+        { id: "center", name: "Center", color: COLORS.yellow },
+        { id: "stem", name: "Stem and leaves", color: COLORS.green },
+      ],
+      palette: [
+        COLORS.pink,
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.green,
+        COLORS.blue,
+      ],
+    },
+
+    {
+      id: 2,
+      level: 1,
+      title: "Rainy Umbrella",
+      description: "Match the colors with the reference.",
+      regions: [
+        { id: "umbrella", name: "Umbrella", color: COLORS.blue },
+        { id: "handle", name: "Handle", color: COLORS.brown },
+        { id: "rain", name: "Rain", color: COLORS.lightBlue },
+      ],
+      palette: [
+        COLORS.blue,
+        COLORS.yellow,
+        COLORS.lightBlue,
+        COLORS.green,
+        COLORS.pink,
+        COLORS.brown,
+      ],
+    },
+
+    {
+      id: 3,
+      level: 1,
+      title: "Bamboo Plant",
+      description: "Color the bamboo like the reference.",
+      regions: [
+        { id: "bambooStem", name: "Bamboo stem", color: COLORS.lightGreen },
+        { id: "bambooLeaves", name: "Leaves", color: COLORS.green },
+        { id: "ground", name: "Ground", color: COLORS.brown },
+      ],
+      palette: [
+        COLORS.lightGreen,
+        COLORS.green,
+        COLORS.brown,
+        COLORS.yellow,
+        COLORS.blue,
+      ],
+    },
+
+    // =======================================================
+    // LEVEL 2
+    // =======================================================
+
+    {
+      id: 4,
+      level: 2,
+      title: "Banana Plant",
+      description: "Match all five colors.",
+      regions: [
+        { id: "bananaLeaves", name: "Leaves", color: COLORS.green },
+        { id: "bananas", name: "Bananas", color: COLORS.yellow },
+        { id: "bananaStem", name: "Stem", color: COLORS.lightGreen },
+        { id: "bananaGround", name: "Ground", color: COLORS.brown },
+        { id: "bananaFlower", name: "Flower", color: COLORS.purple },
+      ],
+      palette: [
+        COLORS.green,
+        COLORS.yellow,
+        COLORS.lightGreen,
+        COLORS.brown,
+        COLORS.purple,
+        COLORS.red,
+      ],
+    },
+
+    {
+      id: 5,
+      level: 2,
+      title: "Village House",
+      description: "Color the house using the reference.",
+      regions: [
+        { id: "roof", name: "Roof", color: COLORS.red },
+        { id: "wall", name: "Wall", color: COLORS.yellow },
+        { id: "door", name: "Door", color: COLORS.brown },
+        { id: "window", name: "Window", color: COLORS.blue },
+        { id: "houseGround", name: "Ground", color: COLORS.green },
+      ],
+      palette: [
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.brown,
+        COLORS.blue,
+        COLORS.green,
+        COLORS.pink,
+      ],
+    },
+
+    {
+      id: 6,
+      level: 2,
+      title: "Hills and House",
+      description: "Match the colors of this simple landscape.",
+      regions: [
+        { id: "sky", name: "Sky", color: COLORS.lightBlue },
+        { id: "hill", name: "Hill", color: COLORS.green },
+        { id: "hillRoof", name: "Roof", color: COLORS.red },
+        { id: "hillWall", name: "House", color: COLORS.yellow },
+        { id: "hillGround", name: "Ground", color: COLORS.green },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.green,
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.blue,
+        COLORS.brown,
+      ],
+    },
+
+    // =======================================================
+    // LEVEL 3
+    // =======================================================
+
+    {
+      id: 7,
+      level: 3,
+      title: "Bamboo Near a House",
+      description: "Color the village scene carefully.",
+      regions: [
+        { id: "bambooSky", name: "Sky", color: COLORS.lightBlue },
+        { id: "bambooRoof", name: "Roof", color: COLORS.red },
+        { id: "bambooWall", name: "House", color: COLORS.yellow },
+        { id: "bambooDoor", name: "Door", color: COLORS.brown },
+        { id: "bambooStems", name: "Bamboo stems", color: COLORS.lightGreen },
+        { id: "bambooLeaf", name: "Bamboo leaves", color: COLORS.green },
+        { id: "bambooGround", name: "Ground", color: COLORS.brown },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.brown,
+        COLORS.lightGreen,
+        COLORS.green,
+        COLORS.blue,
+      ],
+    },
+
+    {
+      id: 8,
+      level: 3,
+      title: "Mountain Village",
+      description: "Match all the colors in the village.",
+      regions: [
+        { id: "mountainSky", name: "Sky", color: COLORS.lightBlue },
+        { id: "cloud", name: "Cloud", color: COLORS.white },
+        { id: "mountain", name: "Mountain", color: COLORS.green },
+        { id: "mountainRoof", name: "Roof", color: COLORS.red },
+        { id: "mountainWall", name: "House", color: COLORS.yellow },
+        { id: "trees", name: "Trees", color: COLORS.green },
+        { id: "mountainGround", name: "Ground", color: COLORS.brown },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.white,
+        COLORS.green,
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.brown,
+        COLORS.purple,
+      ],
+    },
+
+    {
+      id: 9,
+      level: 3,
+      title: "Rainy Village",
+      description: "Match the colors of this rainy scene.",
+      regions: [
+        { id: "rainSky", name: "Sky", color: COLORS.lightBlue },
+        { id: "rainCloud", name: "Cloud", color: COLORS.purple },
+        { id: "rainDrops", name: "Rain", color: COLORS.blue },
+        { id: "rainUmbrella", name: "Umbrella", color: COLORS.yellow },
+        { id: "rainHouse", name: "House", color: COLORS.orange },
+        { id: "rainTrees", name: "Trees", color: COLORS.green },
+        { id: "rainGround", name: "Ground", color: COLORS.brown },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.purple,
+        COLORS.blue,
+        COLORS.yellow,
+        COLORS.orange,
+        COLORS.green,
+        COLORS.brown,
+      ],
+    },
+
+    // =======================================================
+    // LEVEL 4
+    // =======================================================
+
+    {
+      id: 10,
+      level: 4,
+      title: "Northeast Village Landscape",
+      description: "Complete the full landscape.",
+      regions: [
+        { id: "landSky", name: "Sky", color: COLORS.lightBlue },
+        { id: "landCloud", name: "Cloud", color: COLORS.white },
+        { id: "landMountain", name: "Mountain", color: COLORS.purple },
+        { id: "landHill", name: "Hill", color: COLORS.green },
+        { id: "landRoof", name: "Roof", color: COLORS.red },
+        { id: "landWall", name: "House", color: COLORS.yellow },
+        { id: "landTrees", name: "Trees", color: COLORS.lightGreen },
+        { id: "landBamboo", name: "Bamboo", color: COLORS.green },
+        { id: "landPath", name: "Ground", color: COLORS.brown },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.white,
+        COLORS.purple,
+        COLORS.green,
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.lightGreen,
+        COLORS.brown,
+      ],
+    },
+
+    {
+      id: 11,
+      level: 4,
+      title: "Village Garden",
+      description: "Complete the garden using the reference.",
+      regions: [
+        { id: "gardenSky", name: "Sky", color: COLORS.lightBlue },
+        { id: "gardenRoof", name: "Roof", color: COLORS.red },
+        { id: "gardenWall", name: "House", color: COLORS.yellow },
+        { id: "gardenDoor", name: "Door", color: COLORS.brown },
+        { id: "gardenWindow", name: "Window", color: COLORS.blue },
+        { id: "gardenTree", name: "Tree", color: COLORS.green },
+        { id: "gardenFlower", name: "Flowers", color: COLORS.pink },
+        { id: "gardenCenter", name: "Flower centers", color: COLORS.yellow },
+        { id: "gardenGrass", name: "Grass", color: COLORS.lightGreen },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.red,
+        COLORS.yellow,
+        COLORS.brown,
+        COLORS.blue,
+        COLORS.green,
+        COLORS.pink,
+        COLORS.lightGreen,
+      ],
+    },
+
+    {
+      id: 12,
+      level: 4,
+      title: "Northeast Nature",
+      description: "Complete the final nature scene.",
+      regions: [
+        { id: "natureSky", name: "Sky", color: COLORS.lightBlue },
+        { id: "natureCloud", name: "Cloud", color: COLORS.white },
+        { id: "natureMountain", name: "Mountain", color: COLORS.purple },
+        { id: "natureTreeLeaves", name: "Tree leaves", color: COLORS.green },
+        { id: "natureTreeTrunk", name: "Tree trunk", color: COLORS.brown },
+        { id: "natureBambooLeaves", name: "Bamboo leaves", color: COLORS.lightGreen },
+        { id: "natureBambooStem", name: "Bamboo stems", color: COLORS.green },
+        { id: "natureStream", name: "Stream", color: COLORS.blue },
+        { id: "natureFlowers", name: "Flowers", color: COLORS.pink },
+      ],
+      palette: [
+        COLORS.lightBlue,
+        COLORS.white,
+        COLORS.purple,
+        COLORS.green,
+        COLORS.brown,
+        COLORS.lightGreen,
+        COLORS.blue,
+        COLORS.pink,
+      ],
+    },
   ];
 
-  const handleFinish = () => {
-    processTelemetry('CreativeCalm', 1000, 0, (Date.now() - startTime)/1000);
-    onBack();
+  // ---------------------------------------------------------
+  // GAME STATE
+  // ---------------------------------------------------------
+
+  const [currentPicture, setCurrentPicture] = useState(0);
+  const [selectedColor, setSelectedColor] = useState(null);
+
+  // Stores the color currently painted in every region.
+  // A region can be filled even when the selected color is wrong.
+  const [coloredRegions, setColoredRegions] = useState({});
+
+  // Stores only correctly matched regions. This controls completion.
+  const [completedRegions, setCompletedRegions] = useState({});
+
+  const [message, setMessage] = useState(
+    "Look at the colored picture and match the colors."
+  );
+
+  // Level-completion popup
+  const [showLevelPopup, setShowLevelPopup] = useState(false);
+
+  // Exit confirmation popup
+  const [showExitPopup, setShowExitPopup] = useState(false);
+
+  const picture = pictures[currentPicture];
+
+  const level = picture.level;
+
+  // ---------------------------------------------------------
+  // CHECK WHETHER CURRENT PICTURE IS COMPLETE
+  // ---------------------------------------------------------
+
+  const isPictureComplete =
+    picture.regions.length > 0 &&
+    picture.regions.every(
+      (region) => completedRegions[region.id] === region.color
+    );
+
+  // ---------------------------------------------------------
+  // HANDLE COLOR SELECTION
+  // ---------------------------------------------------------
+
+  const handleColorSelect = (color) => {
+    setSelectedColor(color);
+    setMessage("Now tap the part you want to color.");
   };
 
-  const startDrawing = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+  // ---------------------------------------------------------
+  // HANDLE REGION CLICK
+  // ---------------------------------------------------------
+
+  const handleRegionClick = (region) => {
+    if (!selectedColor) {
+      setMessage("Please choose a color first.");
+      return;
+    }
+
+    // Paint the selected part immediately, even if the color is wrong.
+    setColoredRegions((prev) => ({
+      ...prev,
+      [region.id]: selectedColor,
+    }));
+
+    if (selectedColor === region.color) {
+      // Correct color: mark this region as completed.
+      setCompletedRegions((prev) => ({
+        ...prev,
+        [region.id]: selectedColor,
+      }));
+
+      // Check whether this click completed the whole picture.
+      const willCompletePicture = picture.regions.every((r) =>
+        r.id === region.id
+          ? selectedColor === r.color
+          : completedRegions[r.id] === r.color
+      );
+
+      const nextPicture = pictures[currentPicture + 1];
+
+      if (
+        willCompletePicture &&
+        nextPicture &&
+        nextPicture.level !== picture.level
+      ) {
+        // The level is completed, so show the popup immediately.
+        setShowLevelPopup(true);
+      }
+
+      setMessage("Wonderful! You colored this part correctly. 🌟");
+    } else {
+      // Wrong color: keep the color visible, but do not mark the region complete.
+      // The patient can simply choose another color and tap this part again.
+      setCompletedRegions((prev) => {
+        const next = { ...prev };
+        delete next[region.id];
+        return next;
+      });
+
+      setMessage(
+        "Good effort! 🌟 You colored this part, but this color is not the same as the reference. Try another color."
+      );
+    }
+
+    setSelectedColor(null);
+  };
+
+  // ---------------------------------------------------------
+  // NEXT PICTURE
+  // IMPORTANT:
+  // THIS BUTTON IS ONLY ENABLED AFTER ALL REGIONS ARE COMPLETE
+  // ---------------------------------------------------------
+
+  const handleNextPicture = () => {
+    if (!isPictureComplete) {
+      return;
+    }
+
+    if (currentPicture < pictures.length - 1) {
+      const currentLevel = picture.level;
+      const nextPicture = pictures[currentPicture + 1];
+
+      // After the last picture of a level, show a small congratulation popup.
+      if (nextPicture.level !== currentLevel) {
+        setShowLevelPopup(true);
+        return;
+      }
+
+      setCurrentPicture((prev) => prev + 1);
+      setColoredRegions({});
+      setCompletedRegions({});
+      setSelectedColor(null);
+      setMessage(
+        "Look at the colored picture and match the colors."
+      );
+    }
+  };
+
+  const continueToNextLevel = () => {
+    setShowLevelPopup(false);
+
+    if (currentPicture < pictures.length - 1) {
+      setCurrentPicture((prev) => prev + 1);
+      setColoredRegions({});
+      setCompletedRegions({});
+      setSelectedColor(null);
+      setMessage(
+        "Look at the colored picture and match the colors."
+      );
+    }
+  };
+
+  // ---------------------------------------------------------
+  // RESTART GAME
+  // ---------------------------------------------------------
+
+  const restartGame = () => {
+    setCurrentPicture(0);
+    setColoredRegions({});
+    setCompletedRegions({});
+    setSelectedColor(null);
+    setShowLevelPopup(false);
+    setShowExitPopup(false);
+    setMessage(
+      "Look at the colored picture and match the colors."
+    );
+  };
+
+  // ---------------------------------------------------------
+  // GET COLOR OF A REGION
+  // ---------------------------------------------------------
+
+  const getRegionColor = (region) => {
+    if (coloredRegions[region.id]) {
+      return coloredRegions[region.id];
+    }
+
+    return "#FFFFFF";
+  };
+
+  // ---------------------------------------------------------
+  // SVG DRAWING
+  // ---------------------------------------------------------
+
+  const drawPicture = (picture, reference = false) => {
+    const getFill = (id) => {
+      const region = picture.regions.find((r) => r.id === id);
+
+      if (!region) return "#FFFFFF";
+
+      if (reference) {
+        return region.color;
+      }
+
+      return getRegionColor(region);
+    };
+
+    const click = (id) => {
+      if (reference) return;
+
+      const region = picture.regions.find((r) => r.id === id);
+
+      if (region) {
+        handleRegionClick(region);
+      }
+    };
+
+    const common = {
+      stroke: "#222",
+      strokeWidth: 3,
+      strokeLinejoin: "round",
+      strokeLinecap: "round",
+    };
+
+    // -------------------------------------------------------
+    // PICTURE 1 - FLOWER
+    // -------------------------------------------------------
+
+    if (picture.id === 1) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+          {/* Petals */}
+          <g
+            onClick={() => click("petals")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle
+              cx="200"
+              cy="100"
+              r="55"
+              fill={getFill("petals")}
+              {...common}
+            />
+            <circle
+              cx="145"
+              cy="125"
+              r="55"
+              fill={getFill("petals")}
+              {...common}
+            />
+            <circle
+              cx="255"
+              cy="125"
+              r="55"
+              fill={getFill("petals")}
+              {...common}
+            />
+            <circle
+              cx="165"
+              cy="170"
+              r="55"
+              fill={getFill("petals")}
+              {...common}
+            />
+            <circle
+              cx="235"
+              cy="170"
+              r="55"
+              fill={getFill("petals")}
+              {...common}
+            />
+          </g>
+
+          {/* Center */}
+          <circle
+            cx="200"
+            cy="140"
+            r="38"
+            fill={getFill("center")}
+            {...common}
+            onClick={() => click("center")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          />
+
+          {/* Stem */}
+          <path
+            d="M190 175 L190 320"
+            stroke={getFill("stem")}
+            strokeWidth="18"
+            fill="none"
+            {...common}
+            onClick={() => click("stem")}
+          />
+
+          {/* Leaves */}
+          <ellipse
+            cx="155"
+            cy="250"
+            rx="45"
+            ry="22"
+            transform="rotate(-25 155 250)"
+            fill={getFill("stem")}
+            {...common}
+            onClick={() => click("stem")}
+          />
+
+          <ellipse
+            cx="235"
+            cy="280"
+            rx="45"
+            ry="22"
+            transform="rotate(25 235 280)"
+            fill={getFill("stem")}
+            {...common}
+            onClick={() => click("stem")}
+          />
+        </svg>
+      );
+    }
+
     
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-  };
 
-  const draw = (e) => {
-    if (!isDrawing) return;
-    e.preventDefault(); // Prevent scrolling while drawing
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
-    const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+       // -------------------------------------------------------
+// PICTURE 2 - RAINY UMBRELLA
+// -------------------------------------------------------
 
-    ctx.lineTo(x, y);
-    ctx.strokeStyle = activeColor;
-    ctx.lineWidth = 15;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
+if (picture.id === 2) {
   return (
-    <PageContainer title="Creative Calm" level={level}>
-      <div className="w-full flex flex-col justify-between items-center flex-1 bg-white rounded-3xl p-4 md:p-6 shadow-sm border border-slate-200 animate-fade-in">
-        <div className="text-center mb-2">
-          <p className="font-bold text-xl text-pink-700">Relax & Color</p>
-          <p className="text-sm text-slate-500 font-medium">Use your finger to paint the drawing!</p>
-        </div>
-        
-        {/* Canvas Area */}
-        <div className="flex-1 w-full max-w-[320px] flex items-center justify-center relative my-4 bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-inner">
-          <img 
-            src="/image/Printable-Spring-Coloring-Pages.png" 
-            alt="Coloring Page" 
-            className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none opacity-80"
+    <svg
+      viewBox="0 0 400 400"
+      className="w-full h-full"
+    >
+
+      {/* =========================
+          RAIN
+      ========================= */}
+
+      <g
+        onClick={() => click("rain")}
+        style={{ cursor: reference ? "default" : "pointer" }}
+      >
+        <path
+          d="M100 60 L90 90"
+          fill="none"
+          stroke={getFill("rain") === COLORS.white ? "#222" : getFill("rain")}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M160 45 L150 75"
+          fill="none"
+          stroke={getFill("rain") === COLORS.white ? "#222" : getFill("rain")}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M220 60 L210 90"
+          fill="none"
+          stroke={getFill("rain") === COLORS.white ? "#222" : getFill("rain")}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M280 45 L270 75"
+          fill="none"
+          stroke={getFill("rain") === COLORS.white ? "#222" : getFill("rain")}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+
+        <path
+          d="M330 65 L320 95"
+          fill="none"
+          stroke={getFill("rain") === COLORS.white ? "#222" : getFill("rain")}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+      </g>
+
+
+      {/* =========================
+          UMBRELLA CANOPY
+      ========================= */}
+
+      <path
+        d="
+          M55 210
+          Q200 80 345 210
+          Q320 195 295 210
+          Q270 195 245 210
+          Q220 195 195 210
+          Q170 195 145 210
+          Q120 195 95 210
+          Q75 195 55 210
+          Z
+        "
+        fill={getFill("umbrella")}
+        stroke="#222"
+        strokeWidth="4"
+        strokeLinejoin="round"
+        onClick={() => click("umbrella")}
+        style={{ cursor: reference ? "default" : "pointer" }}
+      />
+
+
+      {/* =========================
+          UMBRELLA HANDLE
+      ========================= */}
+
+      <path
+        d="
+          M200 205
+          L200 315
+          Q200 350 170 350
+          Q140 350 140 320
+        "
+        fill="none"
+        stroke={
+          getFill("handle") === COLORS.white
+            ? "#222"
+            : getFill("handle")
+        }
+        strokeWidth="18"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        onClick={() => click("handle")}
+        style={{ cursor: reference ? "default" : "pointer" }}
+      />
+
+    </svg>
+  );
+}
+
+    // -------------------------------------------------------
+    // PICTURE 3 - BAMBOO
+    // -------------------------------------------------------
+
+    if (picture.id === 3) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Ground */}
+          <path
+            d="M40 330 Q200 290 360 330 L360 370 L40 370 Z"
+            fill={getFill("ground")}
+            {...common}
+            onClick={() => click("ground")}
+            style={{ cursor: reference ? "default" : "pointer" }}
           />
-          <canvas 
-            ref={canvasRef}
-            width={320}
-            height={320}
-            className="w-full h-full object-contain z-10 touch-none"
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={stopDrawing}
+
+          {/* Bamboo stems */}
+          <g
+            onClick={() => click("bambooStem")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <rect x="150" y="80" width="35" height="250" rx="12"
+              fill={getFill("bambooStem")} {...common} />
+            <rect x="210" y="110" width="35" height="220" rx="12"
+              fill={getFill("bambooStem")} {...common} />
+          </g>
+
+          {/* Leaves */}
+          <g
+            onClick={() => click("bambooLeaves")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <ellipse
+              cx="130"
+              cy="110"
+              rx="65"
+              ry="25"
+              transform="rotate(-25 130 110)"
+              fill={getFill("bambooLeaves")}
+              {...common}
+            />
+            <ellipse
+              cx="260"
+              cy="145"
+              rx="65"
+              ry="25"
+              transform="rotate(25 260 145)"
+              fill={getFill("bambooLeaves")}
+              {...common}
+            />
+            <ellipse
+              cx="125"
+              cy="185"
+              rx="65"
+              ry="25"
+              transform="rotate(-25 125 185)"
+              fill={getFill("bambooLeaves")}
+              {...common}
+            />
+          </g>
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 4 - BANANA PLANT
+    // -------------------------------------------------------
+
+    if (picture.id === 4) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Ground */}
+          <path
+            d="M40 330 Q200 290 360 330 L360 370 L40 370 Z"
+            fill={getFill("bananaGround")}
+            {...common}
+            onClick={() => click("bananaGround")}
           />
-        </div>
-        
-        {/* Color Palette */}
-        <div className="w-full mt-auto">
-          <p className="text-center text-slate-400 font-bold text-xs uppercase tracking-widest mb-3">Choose a Color</p>
-          <div className="grid grid-cols-6 gap-2 justify-center mb-6">
-            {palette.map((c) => (
-              <button 
-                key={c} 
-                onClick={() => setActiveColor(c)}
-                className={`w-10 h-10 rounded-full shadow-sm transition-all transform hover:scale-110 ${activeColor === c ? 'ring-4 ring-offset-2 ring-slate-800 scale-110' : 'ring-1 ring-slate-200'}`}
-                style={{ backgroundColor: c.replace('0.5', '1') }}
+
+          {/* Stem */}
+          <path
+            d="M190 330 L190 150 Q200 125 215 150 L215 330 Z"
+            fill={getFill("bananaStem")}
+            {...common}
+            onClick={() => click("bananaStem")}
+          />
+
+          {/* Leaves */}
+          <g
+            onClick={() => click("bananaLeaves")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <ellipse
+              cx="120"
+              cy="130"
+              rx="100"
+              ry="35"
+              transform="rotate(-20 120 130)"
+              fill={getFill("bananaLeaves")}
+              {...common}
+            />
+            <ellipse
+              cx="280"
+              cy="125"
+              rx="100"
+              ry="35"
+              transform="rotate(20 280 125)"
+              fill={getFill("bananaLeaves")}
+              {...common}
+            />
+            <ellipse
+              cx="110"
+              cy="190"
+              rx="90"
+              ry="30"
+              transform="rotate(-30 110 190)"
+              fill={getFill("bananaLeaves")}
+              {...common}
+            />
+            <ellipse
+              cx="290"
+              cy="190"
+              rx="90"
+              ry="30"
+              transform="rotate(30 290 190)"
+              fill={getFill("bananaLeaves")}
+              {...common}
+            />
+          </g>
+
+          {/* Bananas */}
+          <g
+            onClick={() => click("bananas")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <ellipse cx="190" cy="100" rx="18" ry="45"
+              fill={getFill("bananas")} {...common} />
+            <ellipse cx="215" cy="100" rx="18" ry="45"
+              fill={getFill("bananas")} {...common} />
+            <ellipse cx="240" cy="105" rx="18" ry="45"
+              fill={getFill("bananas")} {...common} />
+          </g>
+
+          {/* Flower */}
+          <path
+            d="M205 150 Q230 165 205 195 Q180 165 205 150"
+            fill={getFill("bananaFlower")}
+            {...common}
+            onClick={() => click("bananaFlower")}
+          />
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 5 - HOUSE
+    // -------------------------------------------------------
+
+    if (picture.id === 5) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Ground */}
+          <rect
+            x="0"
+            y="320"
+            width="400"
+            height="80"
+            fill={getFill("houseGround")}
+            {...common}
+            onClick={() => click("houseGround")}
+          />
+
+          {/* House wall */}
+          <rect
+            x="90"
+            y="180"
+            width="220"
+            height="140"
+            fill={getFill("wall")}
+            {...common}
+            onClick={() => click("wall")}
+          />
+
+          {/* Roof */}
+          <path
+            d="M60 185 L200 80 L340 185 Z"
+            fill={getFill("roof")}
+            {...common}
+            onClick={() => click("roof")}
+          />
+
+          {/* Door */}
+          <rect
+            x="175"
+            y="235"
+            width="50"
+            height="85"
+            fill={getFill("door")}
+            {...common}
+            onClick={() => click("door")}
+          />
+
+          {/* Window */}
+          <rect
+            x="115"
+            y="220"
+            width="45"
+            height="45"
+            fill={getFill("window")}
+            {...common}
+            onClick={() => click("window")}
+          />
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 6 - HILLS + HOUSE
+    // -------------------------------------------------------
+
+    if (picture.id === 6) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("sky")}
+            {...common}
+            onClick={() => click("sky")}
+          />
+
+          {/* Hill */}
+          <path
+            d="M0 280 Q120 120 240 240 Q310 150 400 270 L400 400 L0 400 Z"
+            fill={getFill("hill")}
+            {...common}
+            onClick={() => click("hill")}
+          />
+
+          {/* Ground */}
+          <path
+            d="M0 315 Q200 280 400 315 L400 400 L0 400 Z"
+            fill={getFill("hillGround")}
+            {...common}
+            onClick={() => click("hillGround")}
+          />
+
+          {/* House */}
+          <rect
+            x="145"
+            y="245"
+            width="110"
+            height="75"
+            fill={getFill("hillWall")}
+            {...common}
+            onClick={() => click("hillWall")}
+          />
+
+          <path
+            d="M125 250 L200 190 L275 250 Z"
+            fill={getFill("hillRoof")}
+            {...common}
+            onClick={() => click("hillRoof")}
+          />
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 7 - BAMBOO + HOUSE
+    // -------------------------------------------------------
+
+    if (picture.id === 7) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("bambooSky")}
+            {...common}
+            onClick={() => click("bambooSky")}
+          />
+
+          {/* Ground */}
+          <rect
+            y="310"
+            width="400"
+            height="90"
+            fill={getFill("bambooGround")}
+            {...common}
+            onClick={() => click("bambooGround")}
+          />
+
+          {/* House wall */}
+          <rect
+            x="60"
+            y="200"
+            width="150"
+            height="110"
+            fill={getFill("bambooWall")}
+            {...common}
+            onClick={() => click("bambooWall")}
+          />
+
+          {/* Roof */}
+          <path
+            d="M35 205 L135 125 L235 205 Z"
+            fill={getFill("bambooRoof")}
+            {...common}
+            onClick={() => click("bambooRoof")}
+          />
+
+          {/* Door */}
+          <rect
+            x="120"
+            y="245"
+            width="45"
+            height="65"
+            fill={getFill("bambooDoor")}
+            {...common}
+            onClick={() => click("bambooDoor")}
+          />
+
+          {/* Bamboo stems */}
+          <g
+            onClick={() => click("bambooStems")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <rect x="280" y="100" width="25" height="210" rx="10"
+              fill={getFill("bambooStems")} {...common} />
+            <rect x="325" y="125" width="25" height="185" rx="10"
+              fill={getFill("bambooStems")} {...common} />
+          </g>
+
+          {/* Bamboo leaves */}
+          <g
+            onClick={() => click("bambooLeaf")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <ellipse cx="265" cy="130" rx="60" ry="22"
+              transform="rotate(-25 265 130)"
+              fill={getFill("bambooLeaf")} {...common} />
+
+            <ellipse cx="345" cy="165" rx="60" ry="22"
+              transform="rotate(25 345 165)"
+              fill={getFill("bambooLeaf")} {...common} />
+
+            <ellipse cx="265" cy="200" rx="60" ry="22"
+              transform="rotate(-25 265 200)"
+              fill={getFill("bambooLeaf")} {...common} />
+          </g>
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 8 - MOUNTAIN VILLAGE
+    // -------------------------------------------------------
+
+    if (picture.id === 8) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("mountainSky")}
+            {...common}
+            onClick={() => click("mountainSky")}
+          />
+
+          {/* Cloud */}
+          <g
+            onClick={() => click("cloud")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="100" cy="80" r="35" fill={getFill("cloud")} {...common} />
+            <circle cx="140" cy="80" r="45" fill={getFill("cloud")} {...common} />
+            <circle cx="180" cy="85" r="30" fill={getFill("cloud")} {...common} />
+          </g>
+
+          {/* Mountain */}
+          <path
+            d="M0 270 L120 100 L210 230 L280 120 L400 270 Z"
+            fill={getFill("mountain")}
+            {...common}
+            onClick={() => click("mountain")}
+          />
+
+          {/* Ground */}
+          <rect
+            y="300"
+            width="400"
+            height="100"
+            fill={getFill("mountainGround")}
+            {...common}
+            onClick={() => click("mountainGround")}
+          />
+
+          {/* House */}
+          <rect
+            x="145"
+            y="230"
+            width="100"
+            height="75"
+            fill={getFill("mountainWall")}
+            {...common}
+            onClick={() => click("mountainWall")}
+          />
+
+          <path
+            d="M130 235 L195 175 L260 235 Z"
+            fill={getFill("mountainRoof")}
+            {...common}
+            onClick={() => click("mountainRoof")}
+          />
+
+          {/* Trees */}
+          <g
+            onClick={() => click("trees")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="70" cy="260" r="35" fill={getFill("trees")} {...common} />
+            <circle cx="330" cy="250" r="40" fill={getFill("trees")} {...common} />
+          </g>
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 9 - RAINY VILLAGE
+    // -------------------------------------------------------
+
+    if (picture.id === 9) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("rainSky")}
+            {...common}
+            onClick={() => click("rainSky")}
+          />
+
+          {/* Cloud */}
+          <g
+            onClick={() => click("rainCloud")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="100" cy="80" r="40" fill={getFill("rainCloud")} {...common} />
+            <circle cx="145" cy="70" r="50" fill={getFill("rainCloud")} {...common} />
+            <circle cx="190" cy="85" r="35" fill={getFill("rainCloud")} {...common} />
+          </g>
+
+          {/* Rain */}
+          <g
+            onClick={() => click("rainDrops")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            {[80, 130, 180, 230, 280, 330].map((x) => (
+              <line
+                key={x}
+                x1={x}
+                y1="130"
+                x2={x - 12}
+                y2="170"
+                stroke={getFill("rainDrops")}
+                strokeWidth="9"
+                strokeLinecap="round"
               />
             ))}
-          </div>
-          
-          <button onClick={handleFinish} className="w-full bg-pink-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-xl flex items-center justify-center gap-2">
-            <CheckCircle2 className="w-6 h-6" /> I'm Done
+          </g>
+
+          {/* Ground */}
+          <rect
+            y="300"
+            width="400"
+            height="100"
+            fill={getFill("rainGround")}
+            {...common}
+            onClick={() => click("rainGround")}
+          />
+
+          {/* House */}
+          <rect
+            x="145"
+            y="220"
+            width="100"
+            height="80"
+            fill={getFill("rainHouse")}
+            {...common}
+            onClick={() => click("rainHouse")}
+          />
+
+          {/* Trees */}
+          <g
+            onClick={() => click("rainTrees")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="70" cy="270" r="45" fill={getFill("rainTrees")} {...common} />
+            <circle cx="330" cy="265" r="50" fill={getFill("rainTrees")} {...common} />
+          </g>
+
+          {/* Umbrella */}
+          <path
+            d="M230 235 Q285 180 340 235 Q285 215 230 235 Z"
+            fill={getFill("rainUmbrella")}
+            {...common}
+            onClick={() => click("rainUmbrella")}
+          />
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 10 - NORTHEAST VILLAGE LANDSCAPE
+    // -------------------------------------------------------
+
+    if (picture.id === 10) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("landSky")}
+            {...common}
+            onClick={() => click("landSky")}
+          />
+
+          {/* Cloud */}
+          <g
+            onClick={() => click("landCloud")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="100" cy="70" r="35" fill={getFill("landCloud")} {...common} />
+            <circle cx="140" cy="65" r="45" fill={getFill("landCloud")} {...common} />
+            <circle cx="180" cy="75" r="30" fill={getFill("landCloud")} {...common} />
+          </g>
+
+          {/* Mountain */}
+          <path
+            d="M0 245 L100 90 L200 230 L280 110 L400 245 Z"
+            fill={getFill("landMountain")}
+            {...common}
+            onClick={() => click("landMountain")}
+          />
+
+          {/* Hill */}
+          <path
+            d="M0 260 Q120 190 220 260 Q310 200 400 260 L400 400 L0 400 Z"
+            fill={getFill("landHill")}
+            {...common}
+            onClick={() => click("landHill")}
+          />
+
+          {/* Ground/path */}
+          <path
+            d="M0 330 Q200 290 400 330 L400 400 L0 400 Z"
+            fill={getFill("landPath")}
+            {...common}
+            onClick={() => click("landPath")}
+          />
+
+          {/* House */}
+          <rect
+            x="145"
+            y="240"
+            width="100"
+            height="80"
+            fill={getFill("landWall")}
+            {...common}
+            onClick={() => click("landWall")}
+          />
+
+          <path
+            d="M125 245 L195 180 L265 245 Z"
+            fill={getFill("landRoof")}
+            {...common}
+            onClick={() => click("landRoof")}
+          />
+
+          {/* Trees */}
+          <g
+            onClick={() => click("landTrees")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="70" cy="280" r="45" fill={getFill("landTrees")} {...common} />
+            <circle cx="330" cy="275" r="50" fill={getFill("landTrees")} {...common} />
+          </g>
+
+          {/* Bamboo */}
+          <g
+            onClick={() => click("landBamboo")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <rect x="285" y="150" width="20" height="160"
+              fill={getFill("landBamboo")} {...common} />
+            <rect x="315" y="170" width="20" height="140"
+              fill={getFill("landBamboo")} {...common} />
+          </g>
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 11 - VILLAGE GARDEN
+    // -------------------------------------------------------
+
+    if (picture.id === 11) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("gardenSky")}
+            {...common}
+            onClick={() => click("gardenSky")}
+          />
+
+          {/* Grass */}
+          <rect
+            y="300"
+            width="400"
+            height="100"
+            fill={getFill("gardenGrass")}
+            {...common}
+            onClick={() => click("gardenGrass")}
+          />
+
+          {/* House */}
+          <rect
+            x="125"
+            y="210"
+            width="130"
+            height="100"
+            fill={getFill("gardenWall")}
+            {...common}
+            onClick={() => click("gardenWall")}
+          />
+
+          <path
+            d="M105 215 L190 140 L275 215 Z"
+            fill={getFill("gardenRoof")}
+            {...common}
+            onClick={() => click("gardenRoof")}
+          />
+
+          {/* Door */}
+          <rect
+            x="170"
+            y="250"
+            width="45"
+            height="60"
+            fill={getFill("gardenDoor")}
+            {...common}
+            onClick={() => click("gardenDoor")}
+          />
+
+          {/* Window */}
+          <rect
+            x="140"
+            y="235"
+            width="35"
+            height="35"
+            fill={getFill("gardenWindow")}
+            {...common}
+            onClick={() => click("gardenWindow")}
+          />
+
+          {/* Tree */}
+          <g
+            onClick={() => click("gardenTree")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <rect
+              x="55"
+              y="230"
+              width="30"
+              height="90"
+              fill={getFill("gardenTree")}
+              {...common}
+            />
+            <circle cx="70" cy="190" r="55"
+              fill={getFill("gardenTree")} {...common} />
+          </g>
+
+          {/* Flowers */}
+          <g
+            onClick={() => click("gardenFlower")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="300" cy="275" r="25"
+              fill={getFill("gardenFlower")} {...common} />
+            <circle cx="350" cy="300" r="25"
+              fill={getFill("gardenFlower")} {...common} />
+          </g>
+
+          {/* Flower centers */}
+          <g
+            onClick={() => click("gardenCenter")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="300" cy="275" r="9"
+              fill={getFill("gardenCenter")} {...common} />
+            <circle cx="350" cy="300" r="9"
+              fill={getFill("gardenCenter")} {...common} />
+          </g>
+        </svg>
+      );
+    }
+
+    // -------------------------------------------------------
+    // PICTURE 12 - NORTHEAST NATURE
+    // -------------------------------------------------------
+
+    if (picture.id === 12) {
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+
+          {/* Sky */}
+          <rect
+            width="400"
+            height="400"
+            fill={getFill("natureSky")}
+            {...common}
+            onClick={() => click("natureSky")}
+          />
+
+          {/* Clouds */}
+          <g
+            onClick={() => click("natureCloud")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="90" cy="65" r="35"
+              fill={getFill("natureCloud")} {...common} />
+            <circle cx="135" cy="60" r="45"
+              fill={getFill("natureCloud")} {...common} />
+            <circle cx="180" cy="70" r="30"
+              fill={getFill("natureCloud")} {...common} />
+          </g>
+
+          {/* Mountain */}
+          <path
+            d="M0 245 L110 95 L205 230 L285 115 L400 245 Z"
+            fill={getFill("natureMountain")}
+            {...common}
+            onClick={() => click("natureMountain")}
+          />
+
+          {/* Stream */}
+          <path
+            d="M180 400 Q160 350 205 310 Q245 275 220 240
+               Q270 280 250 330 Q230 365 260 400 Z"
+            fill={getFill("natureStream")}
+            {...common}
+            onClick={() => click("natureStream")}
+          />
+
+          {/* Tree trunk */}
+          <rect
+            x="55"
+            y="190"
+            width="35"
+            height="150"
+            fill={getFill("natureTreeTrunk")}
+            {...common}
+            onClick={() => click("natureTreeTrunk")}
+          />
+
+          {/* Tree leaves */}
+          <g
+            onClick={() => click("natureTreeLeaves")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="70" cy="155" r="60"
+              fill={getFill("natureTreeLeaves")} {...common} />
+            <circle cx="120" cy="180" r="45"
+              fill={getFill("natureTreeLeaves")} {...common} />
+          </g>
+
+          {/* Bamboo stems */}
+          <g
+            onClick={() => click("natureBambooStem")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <rect x="300" y="150" width="22" height="190"
+              fill={getFill("natureBambooStem")} {...common} />
+            <rect x="335" y="170" width="22" height="170"
+              fill={getFill("natureBambooStem")} {...common} />
+          </g>
+
+          {/* Bamboo leaves */}
+          <g
+            onClick={() => click("natureBambooLeaves")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <ellipse
+              cx="285"
+              cy="175"
+              rx="60"
+              ry="22"
+              transform="rotate(-25 285 175)"
+              fill={getFill("natureBambooLeaves")}
+              {...common}
+            />
+            <ellipse
+              cx="355"
+              cy="205"
+              rx="60"
+              ry="22"
+              transform="rotate(25 355 205)"
+              fill={getFill("natureBambooLeaves")}
+              {...common}
+            />
+          </g>
+
+          {/* Flowers */}
+          <g
+            onClick={() => click("natureFlowers")}
+            style={{ cursor: reference ? "default" : "pointer" }}
+          >
+            <circle cx="130" cy="340" r="20"
+              fill={getFill("natureFlowers")} {...common} />
+            <circle cx="300" cy="350" r="20"
+              fill={getFill("natureFlowers")} {...common} />
+          </g>
+        </svg>
+      );
+    }
+
+    return null;
+  };
+
+  // ---------------------------------------------------------
+  // PROGRESS
+  // ---------------------------------------------------------
+
+  const completedCount = picture.regions.filter(
+    (region) => completedRegions[region.id] === region.color
+  ).length;
+
+  const totalRegions = picture.regions.length;
+
+  const progress =
+    totalRegions === 0
+      ? 0
+      : Math.round((completedCount / totalRegions) * 100);
+
+  // ---------------------------------------------------------
+  // FINAL SCREEN
+  // ---------------------------------------------------------
+
+  if (currentPicture === pictures.length - 1 && isPictureComplete) {
+    return (
+      <div className="w-full max-w-6xl mx-auto p-6">
+
+        <div className="bg-white rounded-3xl shadow-lg p-8 text-center">
+
+          <div className="text-6xl mb-4">🎨</div>
+
+          <h2 className="text-3xl font-bold text-emerald-700 mb-3">
+            CreativeCalm Complete!
+          </h2>
+
+          <p className="text-lg text-gray-600 mb-6">
+            Wonderful work! You completed all 12 pictures.
+          </p>
+
+          <button
+            onClick={restartGame}
+            className="px-8 py-4 rounded-2xl bg-emerald-600 text-white text-lg font-semibold hover:bg-emerald-700"
+          >
+            Start Again
           </button>
+
         </div>
       </div>
-    </PageContainer>
+    );
+  }
+
+  // ---------------------------------------------------------
+  // MAIN GAME UI
+  // ---------------------------------------------------------
+
+  return (
+    <div className="w-full max-w-7xl mx-auto p-4 md:p-6">
+
+      {/* HEADER */}
+      <div className="text-center mb-5">
+
+        <h1 className="text-3xl md:text-4xl font-bold text-emerald-700">
+          🎨 CreativeCalm
+        </h1>
+
+        <p className="text-gray-600 mt-2">
+          Look at the reference and color the picture to match it.
+        </p>
+
+      </div>
+
+      {/* LEVEL + PICTURE INFO */}
+      <div className="bg-white rounded-2xl shadow-md p-4 mb-5">
+
+        <div className="flex flex-col md:flex-row justify-between items-center gap-3">
+
+          <div>
+            <p className="font-bold text-xl">
+              Picture {currentPicture + 1} of {pictures.length}
+            </p>
+          </div>
+
+          <div className="text-center">
+
+            <p className="font-semibold text-gray-700">
+              {picture.title}
+            </p>
+
+            <p className="text-sm text-gray-500">
+              {completedCount} of {totalRegions} parts completed
+            </p>
+
+          </div>
+
+        </div>
+
+        {/* PROGRESS BAR */}
+        <div className="mt-4">
+
+          <div className="w-full bg-gray-200 rounded-full h-4">
+
+            <div
+              className="bg-emerald-500 h-4 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+
+          </div>
+
+          <p className="text-center text-sm text-gray-500 mt-1">
+            {progress}% complete
+          </p>
+
+        </div>
+
+      </div>
+
+      {/* EXIT BUTTON */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={() => setShowExitPopup(true)}
+          className="px-5 py-3 rounded-2xl bg-gray-700 text-white font-semibold hover:bg-gray-800 shadow-md"
+      >
+  Exit
+</button>
+      </div>
+
+      {/* REFERENCE + PATIENT IMAGE */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        {/* REFERENCE */}
+        <div className="bg-white rounded-3xl shadow-md p-4">
+
+          <h2 className="text-center text-xl font-bold text-gray-700 mb-3">
+            🌈 Reference
+          </h2>
+
+          <div className="aspect-square w-full border-4 border-gray-200 rounded-2xl overflow-hidden bg-white">
+            {drawPicture(picture, true)}
+          </div>
+
+        </div>
+
+        {/* PATIENT IMAGE */}
+        <div className="bg-white rounded-3xl shadow-md p-4">
+
+          <h2 className="text-center text-xl font-bold text-gray-700 mb-3">
+            🖌️ Your Picture
+          </h2>
+
+          <div className="aspect-square w-full border-4 border-emerald-200 rounded-2xl overflow-hidden bg-white">
+            {drawPicture(picture, false)}
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* COLOR PALETTE */}
+      <div className="bg-white rounded-3xl shadow-md p-5 mt-5">
+
+        <h2 className="text-center text-xl font-bold text-gray-700 mb-4">
+          Choose a Color
+        </h2>
+
+        <div className="flex flex-wrap justify-center gap-4">
+
+          {picture.palette.map((color, index) => (
+
+            <button
+              key={`${color}-${index}`}
+              onClick={() => handleColorSelect(color)}
+              aria-label={`Select color ${index + 1}`}
+              className={`
+                w-14 h-14 md:w-16 md:h-16
+                rounded-full
+                border-4
+                transition-all
+                duration-200
+                hover:scale-110
+                ${selectedColor === color
+                  ? "border-gray-900 scale-110 shadow-lg"
+                  : "border-gray-300"}
+              `}
+              style={{
+                backgroundColor: color,
+              }}
+            />
+
+          ))}
+
+        </div>
+
+      </div>
+
+      {/* MESSAGE */}
+      <div className="text-center mt-5">
+
+        <div
+          className={`
+            inline-block
+            px-6 py-3
+            rounded-2xl
+            text-lg
+            font-semibold
+            ${
+              isPictureComplete
+                ? "bg-green-100 text-green-700"
+                : "bg-blue-50 text-blue-700"
+            }
+          `}
+        >
+          {isPictureComplete
+            ? "🎉 Excellent! You completed this picture!"
+            : message}
+        </div>
+
+      </div>
+
+      {/* NEXT BUTTON */}
+      <div className="flex justify-center mt-5">
+
+        <button
+          onClick={handleNextPicture}
+          disabled={!isPictureComplete}
+          className={`
+            px-8 py-4
+            rounded-2xl
+            text-lg
+            font-bold
+            transition-all
+            ${
+              isPictureComplete
+                ? "bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+            }
+          `}
+        >
+          {currentPicture === 2 ||
+          currentPicture === 5 ||
+          currentPicture === 8
+            ? "Next Level →"
+            : "Next Picture →"}
+        </button>
+
+      </div>
+
+
+      {/* LEVEL COMPLETION POPUP */}
+      {showLevelPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-2xl">
+            <div className="text-5xl mb-3">🎉</div>
+            <h2 className="text-2xl font-bold text-emerald-700 mb-3">
+              Wonderful Work!
+            </h2>
+            <p className="text-gray-700 text-lg mb-6">
+              You completed Level {picture.level}! You did a great job coloring all the pictures.
+            </p>
+            <p className="text-gray-600 mb-6">
+              Would you like to participate in the next level?
+            </p>
+            <button
+              onClick={continueToNextLevel}
+              className="px-7 py-3 rounded-2xl bg-emerald-600 text-white font-bold hover:bg-emerald-700"
+            >
+              Yes, Next Level →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* EXIT CONFIRMATION POPUP */}
+      {showExitPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-7 text-center shadow-2xl">
+            <div className="text-4xl mb-3">🚪</div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-3">
+              Are you sure to exit?
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Your current painting progress will not be continued if you exit.
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => setShowExitPopup(false)}
+                className="px-7 py-3 rounded-2xl bg-gray-200 text-gray-700 font-bold hover:bg-gray-300"
+              >
+                No
+              </button>
+              <button
+                onClick={() => {
+                  setShowExitPopup(false);
+                  if (onExit) {
+                    onExit();
+                  } else {
+                    window.history.back();
+                  }
+                }}
+                className="px-7 py-3 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600"
+              >
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
-
 // 6. SOUND GUESS
 const SoundGuessGame = ({ onBack, level, processTelemetry }) => {
   const [phase, setPhase] = useState('play');
@@ -827,8 +2623,6 @@ const SoundGuessGame = ({ onBack, level, processTelemetry }) => {
   }, [level]);
 
   const playSound = () => {
-    // Ideally use real audio files. Fallback to basic audio context beep or simple TTS for simulation.
-    // In a real NER app, this would play an mp3.
     const u = new SpeechSynthesisUtterance(`${target.name} sound effect`);
     window.speechSynthesis.speak(u);
     setTimeout(() => setPhase('guess'), 2000);
@@ -866,7 +2660,6 @@ const SoundGuessGame = ({ onBack, level, processTelemetry }) => {
       {phase === 'result' && (
          <div className="text-center mt-10">
            <div className="text-8xl mb-8">🎶</div>
-           <button onClick={onBack} className="bg-indigo-600 text-white font-bold px-8 py-4 rounded-xl text-xl">Back</button>
          </div>
       )}
     </PageContainer>
@@ -875,7 +2668,7 @@ const SoundGuessGame = ({ onBack, level, processTelemetry }) => {
 
 // 7. EXPLORE & LEARN
 const ExploreLearnGame = ({ onBack, level, processTelemetry }) => {
-  const [phase, setPhase] = useState('explore'); // explore, explain, question, result
+  const [phase, setPhase] = useState('explore');
   const [startTime] = useState(Date.now());
   const pool = [
     { icon: '🏔️', name: 'Mountain', desc: 'Mountains are important geographical features of the North Eastern Region.' },
@@ -1076,7 +2869,7 @@ const FindHomeGame = ({ onBack, level, processTelemetry }) => {
               <div key={r} className="flex">
                 {row.map((cell, c) => {
                   let bg = 'bg-slate-50';
-                  if (cell === '1') bg = 'bg-emerald-600'; // Hedge / Wall
+                  if (cell === '1') bg = 'bg-emerald-600';
                   if (cell === 'E') bg = 'bg-blue-100';
                   
                   const isPlayer = pos.r === r && pos.c === c;
@@ -1163,7 +2956,7 @@ export default function TherapySuite({ onNavigate, currentScreen, saveGameResult
     if (activeGame === 'routine') return <DailyRoutineGame onBack={handleBack} level={gameLevels.routine} processTelemetry={processTelemetry} />;
     if (activeGame === 'money') return <MoneyMatchGame onBack={handleBack} level={gameLevels.money} processTelemetry={processTelemetry} />;
     if (activeGame === 'tray') return <MemoryTrayGame onBack={handleBack} level={gameLevels.tray} processTelemetry={processTelemetry} />;
-    if (activeGame === 'calm') return <CreativeCalmGame onBack={handleBack} level={gameLevels.calm} processTelemetry={processTelemetry} />;
+    if (activeGame === 'calm') return <CreativeCalmGame onExit={handleBack} />;
     if (activeGame === 'sound') return <SoundGuessGame onBack={handleBack} level={gameLevels.sound} processTelemetry={processTelemetry} />;
     if (activeGame === 'explore') return <ExploreLearnGame onBack={handleBack} level={gameLevels.explore} processTelemetry={processTelemetry} />;
     if (activeGame === 'bird') return <FeedDogGame onBack={handleBack} level={gameLevels.bird} processTelemetry={processTelemetry} />;
