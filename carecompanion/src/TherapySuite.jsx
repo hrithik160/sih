@@ -847,139 +847,655 @@ const createMoneyQuestions = (level) => {
 };
 
 // 4. MEMORY TRAY
+// 4. MEMORY TRAY
 const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
+  const LEVEL_CONFIG = {
+    1: {
+      name: 'Memory Warm-Up',
+      targetCount: 4,
+      optionCount: 8,
+      observeSeconds: 8,
+    },
+    2: {
+      name: 'Memory Challenge',
+      targetCount: 4,
+      optionCount: 10,
+      observeSeconds: 10,
+    },
+    3: {
+      name: 'Memory Explorer',
+      targetCount: 6,
+      optionCount: 12,
+      observeSeconds: 13,
+    },
+    4: {
+      name: 'Memory Master',
+      targetCount: 8,
+      optionCount: 16,
+      observeSeconds: 16,
+    },
+  };
+
+  const OBJECT_STYLES = [
+    'from-rose-100 to-pink-50 border-rose-200',
+    'from-sky-100 to-cyan-50 border-sky-200',
+    'from-amber-100 to-yellow-50 border-amber-200',
+    'from-emerald-100 to-green-50 border-emerald-200',
+    'from-violet-100 to-purple-50 border-violet-200',
+    'from-orange-100 to-red-50 border-orange-200',
+    'from-indigo-100 to-blue-50 border-indigo-200',
+    'from-fuchsia-100 to-pink-50 border-fuchsia-200',
+  ];
+
+  const allItems = [
+    '🍎', '🍌', '🍊', '🍇', '🍉', '🥕', '🍞', '🧀',
+    '🥚', '🥛', '🍪', '🍰', '🍵', '☕', '🥄', '🍽️',
+    '🏠', '🪑', '🛏️', '🛋️', '💡', '🕯️', '🧹', '🧺',
+    '🧴', '🧼', '🪥', '🧻', '🔑', '🔒', '📱', '⌚',
+    '👓', '💊', '👟', '🧢', '🧥', '🧦', '👜', '💍',
+    '📖', '📰', '✏️', '🖊️', '📏', '✂️', '📌', '📒',
+    '🧸', '⚽', '🎈', '🎲', '🧩', '🎨', '🎸', '📷',
+  ];
+
+  const [sessionLevel, setSessionLevel] = useState(level);
   const [phase, setPhase] = useState('observe');
-  const [startTime] = useState(Date.now());
-  const allItems = ['💊', '👟', '👓', '📱', '🔑', '⌚', '🥛', '🍎', '🖊️', '💍', '📚', '✂️', '☂️', '☕', '🎧', '📸'];
+  const [roundIndex, setRoundIndex] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(8);
+
   const [tray, setTray] = useState([]);
-  const [distractors, setDistractors] = useState([]);
   const [optionsGrid, setOptionsGrid] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
-  
+
+  const [currentResult, setCurrentResult] = useState(null);
+  const [roundResults, setRoundResults] = useState([]);
+  const [finalSummary, setFinalSummary] = useState(null);
+
+  const [sessionStartTime, setSessionStartTime] = useState(Date.now());
+  const usedItemsRef = React.useRef([]);
+
+  const config = LEVEL_CONFIG[sessionLevel] || LEVEL_CONFIG[1];
+
+  // Reset the whole game when the selected level changes
   useEffect(() => {
-    const targetCount = level === 1 ? 4 : level === 2 ? 6 : 8;
-    const gridCount = level === 1 ? 8 : level === 2 ? 12 : 16;
-    
-    const shuffledItems = shuffle([...allItems]);
-    const selectedTray = shuffledItems.slice(0, targetCount);
-    const distractorItems = shuffledItems.slice(targetCount, gridCount);
-    
-    setTray(selectedTray);
-    setDistractors(distractorItems);
-    setOptionsGrid(shuffle([...selectedTray, ...distractorItems]));
-    
-    const observeTime = level === 1 ? 6000 : level === 2 ? 5000 : 4000;
-    setTimeout(() => setPhase('question'), observeTime);
+    setSessionLevel(level);
+    setRoundIndex(0);
+    setRoundResults([]);
+    setCurrentResult(null);
+    setFinalSummary(null);
+    setSelectedItems([]);
+    setSessionStartTime(Date.now());
+    usedItemsRef.current = [];
   }, [level]);
 
+  // Generate a completely new memory round
+  useEffect(() => {
+    const availableItems = allItems.filter(item => !usedItemsRef.current.includes(item));
+    const shuffledItems = shuffle(
+      availableItems.length >= config.targetCount
+        ? availableItems
+        : allItems
+    );
+
+    const selectedTray = shuffledItems.slice(0, config.targetCount);
+    usedItemsRef.current = [...usedItemsRef.current, ...selectedTray];
+
+    const remainingItems = shuffledItems.filter(
+      item => !selectedTray.includes(item)
+    );
+
+    const distractorCount = config.optionCount - config.targetCount;
+
+    const distractors = shuffle(remainingItems).slice(
+      0,
+      distractorCount
+    );
+
+    const newOptionsGrid = shuffle([
+      ...selectedTray,
+      ...distractors,
+    ]);
+
+    setTray(selectedTray);
+    setOptionsGrid(newOptionsGrid);
+    setSelectedItems([]);
+    setCurrentResult(null);
+    setPhase('observe');
+
+    let remainingSeconds = config.observeSeconds;
+    setTimeLeft(remainingSeconds);
+    let transitionId;
+
+    const timerId = setInterval(() => {
+      remainingSeconds -= 1;
+
+      setTimeLeft(remainingSeconds);
+
+      if (remainingSeconds <= 0) {
+        clearInterval(timerId);
+        setPhase('transition');
+        transitionId = setTimeout(() => setPhase('question'), 1200);
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(timerId);
+      if (transitionId) clearTimeout(transitionId);
+    };
+  }, [sessionLevel, roundIndex]);
+
   const toggleSelection = (item) => {
-    if (selectedItems.includes(item)) {
-      setSelectedItems(selectedItems.filter(i => i !== item));
-    } else {
-      setSelectedItems([...selectedItems, item]);
-    }
+    setSelectedItems(previous => {
+      if (previous.includes(item)) {
+        return previous.filter(i => i !== item);
+      }
+
+      return [...previous, item];
+    });
   };
 
   const submitAnswers = () => {
-    let correctCount = 0;
-    let falsePositives = 0;
-    
-    selectedItems.forEach(item => {
-      if (tray.includes(item)) correctCount++;
-      else falsePositives++;
-    });
-    
+    const correctCount = selectedItems.filter(item =>
+      tray.includes(item)
+    ).length;
+
+    const falsePositives = selectedItems.filter(item =>
+      !tray.includes(item)
+    ).length;
+
     const missedCount = tray.length - correctCount;
-    const totalErrors = falsePositives + missedCount;
-    
-    processTelemetry('MemoryTray', 1000, totalErrors, (Date.now() - startTime)/1000);
+
+    const result = {
+      correctCount,
+      missedCount,
+      falsePositives,
+      totalErrors: missedCount + falsePositives,
+    };
+
+    setCurrentResult(result);
     setPhase('result');
   };
 
+  const continueGame = () => {
+    const updatedResults = [...roundResults, currentResult];
+
+    // Three rounds per level
+    if (roundIndex < 2) {
+      setRoundResults(updatedResults);
+      setRoundIndex(previous => previous + 1);
+      return;
+    }
+
+    // Final result
+    const totalCorrect = updatedResults.reduce(
+      (sum, result) => sum + result.correctCount,
+      0
+    );
+
+    const totalMissed = updatedResults.reduce(
+      (sum, result) => sum + result.missedCount,
+      0
+    );
+
+    const totalFalsePositives = updatedResults.reduce(
+      (sum, result) => sum + result.falsePositives,
+      0
+    );
+
+    const totalErrors = updatedResults.reduce(
+      (sum, result) => sum + result.totalErrors,
+      0
+    );
+
+    const totalPossible = updatedResults.reduce(
+      (sum, result) => sum + tray.length,
+      0
+    );
+
+    const summary = {
+      totalCorrect,
+      totalMissed,
+      totalFalsePositives,
+      totalErrors,
+      totalPossible,
+    };
+
+    setRoundResults(updatedResults);
+    setFinalSummary(summary);
+    setPhase('complete');
+
+    processTelemetry(
+      'MemoryTray',
+      1000,
+      totalErrors,
+      (Date.now() - sessionStartTime) / 1000
+    );
+  };
+
+  const timerProgress = Math.max(
+    0,
+    Math.min(1, timeLeft / config.observeSeconds)
+  );
+
+  const timerDegree = timerProgress * 360;
+
+  const timerColor =
+    timeLeft <= 2
+      ? '#ef4444'
+      : timeLeft <= 4
+      ? '#f59e0b'
+      : '#10b981';
+
+  const timerRingStyle = {
+    background: `conic-gradient(${timerColor} ${timerDegree}deg, #e2e8f0 ${timerDegree}deg)`,
+  };
+
+  const trayGridClass =
+    tray.length <= 4
+      ? 'grid-cols-2'
+      : tray.length <= 6
+      ? 'grid-cols-2 md:grid-cols-3'
+      : 'grid-cols-2 md:grid-cols-4';
+
+  const optionGridClass =
+    optionsGrid.length <= 8
+      ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+      : optionsGrid.length <= 12
+      ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+      : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+
   return (
     <PageContainer title="Memory Tray" level={level}>
+
+      {/* ==================== OBSERVE PHASE ==================== */}
       {phase === 'observe' && (
-        <div className="flex flex-col items-center w-full animate-fade-in">
-          <p className="text-center font-bold text-slate-600 mb-6 text-lg">Memorize all the objects on the tray!</p>
-          <div className="bg-amber-100 p-8 rounded-3xl border-4 border-amber-800 grid grid-cols-2 md:grid-cols-3 gap-6 w-full shadow-xl">
-            {tray.map((it, i) => <div key={i} className="text-6xl flex justify-center animate-bounce-in" style={{animationDelay: `${i*0.1}s`}}>{it}</div>)}
+        <div className="w-full animate-fade-in">
+
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-800 px-5 py-2 rounded-full font-black text-sm uppercase tracking-wide mb-3">
+              🧠 {config.name}
+            </div>
+
+            <h2 className="text-2xl md:text-3xl font-black text-slate-800">
+              Remember what you see!
+            </h2>
+
+            <p className="text-slate-500 font-medium mt-2">
+              Look carefully at every object before the timer ends.
+            </p>
           </div>
-        </div>
-      )}
-      
-      {phase === 'question' && (
-        <div className="flex flex-col items-center w-full animate-fade-in">
-          <p className="text-center font-bold text-amber-900 mb-2 text-xl">What was on the tray?</p>
-          <p className="text-center font-medium text-slate-500 mb-6 text-sm">Select all the objects you remember seeing.</p>
-          
-          <div className="grid grid-cols-3 md:grid-cols-4 gap-3 w-full mb-8">
-            {optionsGrid.map((opt, i) => {
-              const isSelected = selectedItems.includes(opt);
-              return (
-                <button 
-                  key={i} 
-                  onClick={() => toggleSelection(opt)} 
-                  className={`text-5xl p-4 rounded-2xl shadow-sm transition-all border-4 flex justify-center items-center h-24 ${
-                    isSelected ? 'bg-amber-100 border-amber-600 scale-105' : 'bg-white border-transparent hover:border-amber-200'
-                  }`}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-6 items-stretch">
+
+            {/* LARGE TIMER */}
+            <div className="bg-white rounded-[2rem] shadow-xl border border-slate-100 p-6 flex flex-col items-center justify-center min-h-[260px]">
+
+              <div className="text-xs font-black tracking-[0.2em] text-slate-400 uppercase mb-4">
+                Time to Remember
+              </div>
+
+              <div
+                className="w-44 h-44 rounded-full p-3 shadow-inner"
+                style={timerRingStyle}
+              >
+                <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center shadow-lg">
+                  <div
+                    className="text-7xl font-black leading-none"
+                    style={{ color: timerColor }}
+                  >
+                    {timeLeft}
+                  </div>
+
+                  <div className="text-sm font-black text-slate-400 uppercase tracking-wide mt-2">
+                    seconds
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 text-center">
+                <div className="text-sm font-bold text-slate-500">
+                  Stay focused
+                </div>
+
+                <div className="flex justify-center gap-1 mt-2">
+                  {[0, 1, 2, 3, 4].map(dot => (
+                    <span
+                      key={dot}
+                      className={`w-2.5 h-2.5 rounded-full transition-all ${
+                        dot < Math.ceil((timeLeft / config.observeSeconds) * 5)
+                          ? 'bg-emerald-400'
+                          : 'bg-slate-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* VIBRANT MEMORY TRAY */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-violet-50 via-white to-amber-50 rounded-[2rem] border-2 border-violet-100 shadow-xl p-5 md:p-8">
+
+              <div className="absolute -top-16 -right-16 w-40 h-40 bg-yellow-200/30 rounded-full blur-2xl" />
+              <div className="absolute -bottom-20 -left-16 w-44 h-44 bg-violet-200/30 rounded-full blur-2xl" />
+
+              <div className="relative">
+
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <div className="text-xs font-black text-violet-500 uppercase tracking-[0.18em]">
+                      Memory Tray
+                    </div>
+                    <div className="text-xl font-black text-slate-800 mt-1">
+                      Keep these objects in mind
+                    </div>
+                  </div>
+
+                  <div className="bg-white/80 backdrop-blur-sm px-4 py-2 rounded-2xl shadow-sm font-black text-slate-600">
+                    ✨ Focus
+                  </div>
+                </div>
+
+                <div
+                  className={`grid ${trayGridClass} gap-4 md:gap-5`}
                 >
-                  {opt}
-                </button>
-              );
-            })}
+                  {tray.map((item, index) => (
+                    <div
+                      key={`${item}-${index}`}
+                      className={`
+                        bg-gradient-to-br ${OBJECT_STYLES[index % OBJECT_STYLES.length]}
+                        border-2
+                        rounded-[1.6rem]
+                        min-h-[140px]
+                        md:min-h-[160px]
+                        flex items-center justify-center
+                        shadow-lg
+                        hover:scale-[1.03]
+                        transition-transform
+                        animate-bounce-in
+                      `}
+                      style={{
+                        animationDelay: `${index * 0.12}s`,
+                      }}
+                    >
+                      <div className="text-7xl md:text-8xl drop-shadow-md select-none">
+                        {item}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+              </div>
+            </div>
+
           </div>
-          
-          <button 
-            onClick={submitAnswers}
-            disabled={selectedItems.length === 0}
-            className="w-full bg-emerald-600 disabled:bg-slate-300 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition-all text-xl"
-          >
-            Submit Answers
-          </button>
         </div>
       )}
 
-      {phase === 'result' && (
-        <div className="text-center w-full flex flex-col items-center animate-bounce-in">
-          {(() => {
-            const correctCount = selectedItems.filter(i => tray.includes(i)).length;
-            const missedCount = tray.length - correctCount;
-            const falsePositives = selectedItems.filter(i => !tray.includes(i)).length;
-            const isPerfect = missedCount === 0 && falsePositives === 0;
-            
-            return (
-              <>
-                <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-4 ${isPerfect ? 'bg-emerald-100' : 'bg-amber-100'}`}>
-                   {isPerfect ? <CheckCircle2 className="w-16 h-16 text-emerald-600" /> : <Brain className="w-16 h-16 text-amber-600" />}
-                </div>
-                <h2 className={`text-3xl font-black mb-2 ${isPerfect ? 'text-emerald-800' : 'text-amber-800'}`}>
-                  {isPerfect ? 'Perfect Memory!' : 'Good Effort!'}
-                </h2>
-                
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 w-full mt-4 flex flex-col gap-3">
-                  <div className="flex justify-between items-center text-lg">
-                    <span className="font-bold text-slate-600">Objects Found:</span>
-                    <span className="font-black text-emerald-600">{correctCount} / {tray.length}</span>
-                  </div>
-                  {missedCount > 0 && (
-                    <div className="flex justify-between items-center text-lg">
-                      <span className="font-bold text-slate-600">Missed Objects:</span>
-                      <span className="font-black text-red-500">{missedCount}</span>
-                    </div>
-                  )}
-                  {falsePositives > 0 && (
-                    <div className="flex justify-between items-center text-lg">
-                      <span className="font-bold text-slate-600">Extra (Wrong):</span>
-                      <span className="font-black text-orange-500">{falsePositives}</span>
-                    </div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
-          <button onClick={onBack} className="mt-8 bg-emerald-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg active:scale-95 transition-all w-full">Back to Suite</button>
+      {/* ==================== OBSERVE TO RECALL TRANSITION ==================== */}
+      {phase === 'transition' && (
+        <div className="w-full min-h-[430px] flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
+          <div className="w-24 h-24 rounded-full bg-amber-100 flex items-center justify-center shadow-sm mb-6 animate-pulse">
+            <Brain className="w-12 h-12 text-amber-600" />
+          </div>
+          <h2 className="text-2xl md:text-3xl font-black text-slate-800">
+            Great! Now let&apos;s see what you remember.
+          </h2>
+          <p className="text-slate-500 font-medium mt-3">
+            It&apos;s your turn to select every object you saw on the tray.
+          </p>
         </div>
       )}
+
+      {/* ==================== QUESTION PHASE ==================== */}
+      {phase === 'question' && (
+        <div className="w-full animate-fade-in">
+
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-800 px-5 py-2 rounded-full font-black text-sm uppercase tracking-wide mb-3">
+              🧠 Memory Check
+            </div>
+
+            <h2 className="text-2xl md:text-3xl font-black text-slate-800">
+              What was on the tray?
+            </h2>
+
+            <p className="text-slate-500 font-medium mt-2">
+              Select all the objects you remember seeing.
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-slate-50 to-white rounded-[2rem] border border-slate-200 p-5 md:p-8 shadow-sm">
+
+            <div
+              className={`grid ${optionGridClass} gap-5 md:gap-7 mb-10`}
+            >
+              {optionsGrid.map((option, index) => {
+                const isSelected = selectedItems.includes(option);
+
+                return (
+                  <button
+                    key={`${option}-${index}`}
+                    onClick={() => toggleSelection(option)}
+                    className={`
+                      relative
+                      min-h-[140px]
+                      md:min-h-[165px]
+                      rounded-[1.4rem]
+                      border-2
+                      shadow-sm
+                      flex items-center justify-center
+                      transition-all duration-200
+                      active:scale-95
+                      bg-gradient-to-br
+                      ${OBJECT_STYLES[index % OBJECT_STYLES.length]}
+                      ${
+                        isSelected
+                          ? 'ring-4 ring-emerald-300 scale-[1.04] shadow-lg'
+                          : 'hover:scale-[1.02] hover:shadow-md'
+                      }
+                    `}
+                  >
+                    <span className="text-6xl md:text-7xl drop-shadow-sm select-none">
+                      {option}
+                    </span>
+
+                    {isSelected && (
+                      <span className="absolute top-2 right-2 w-8 h-8 rounded-full bg-emerald-500 text-white font-black flex items-center justify-center shadow-md">
+                        ✓
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+
+              <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 font-bold text-slate-600 w-full sm:w-auto text-center">
+                Selected:{" "}
+                <span className="text-emerald-600 font-black">
+                  {selectedItems.length}
+                </span>
+              </div>
+
+              <button
+                onClick={submitAnswers}
+                disabled={selectedItems.length === 0}
+                className="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-black py-5 rounded-2xl shadow-lg active:scale-[0.98] transition-all text-xl"
+              >
+                ✓ Check My Memory
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================== ROUND RESULT ==================== */}
+      {phase === 'result' && currentResult && (
+        <div className="w-full flex flex-col items-center animate-bounce-in">
+
+          <div
+            className={`
+              w-28 h-28 rounded-full flex items-center justify-center mb-5 shadow-lg
+              ${
+                currentResult.totalErrors === 0
+                  ? 'bg-emerald-100'
+                  : 'bg-amber-100'
+              }
+            `}
+          >
+            {currentResult.totalErrors === 0 ? (
+              <CheckCircle2 className="w-16 h-16 text-emerald-600" />
+            ) : (
+              <Brain className="w-16 h-16 text-amber-600" />
+            )}
+          </div>
+
+          <h2
+            className={`
+              text-3xl md:text-4xl font-black mb-2
+              ${
+                currentResult.totalErrors === 0
+                  ? 'text-emerald-800'
+                  : 'text-amber-800'
+              }
+            `}
+          >
+            {currentResult.totalErrors === 0
+              ? 'Amazing Memory!'
+              : 'Great Effort!'}
+          </h2>
+
+          <p className="text-slate-500 font-medium text-center mb-6">
+            You remembered {currentResult.correctCount} of {tray.length} objects.
+          </p>
+
+          <div className="bg-white p-6 md:p-7 rounded-[2rem] shadow-lg border border-slate-100 w-full flex flex-col gap-4">
+
+            <div className="flex justify-between items-center text-lg">
+              <span className="font-bold text-slate-600">
+                Objects Remembered
+              </span>
+              <span className="font-black text-emerald-600">
+                {currentResult.correctCount} / {tray.length}
+              </span>
+            </div>
+
+            <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 rounded-full transition-all"
+                style={{
+                  width: `${Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      (currentResult.correctCount / tray.length) * 100
+                    )
+                  )}%`,
+                }}
+              />
+            </div>
+
+            {currentResult.missedCount > 0 && (
+              <div className="flex justify-between items-center text-lg">
+                <span className="font-bold text-slate-600">
+                  Missed
+                </span>
+                <span className="font-black text-orange-500">
+                  {currentResult.missedCount}
+                </span>
+              </div>
+            )}
+
+            {currentResult.falsePositives > 0 && (
+              <div className="flex justify-between items-center text-lg">
+                <span className="font-bold text-slate-600">
+                  Extra Choices
+                </span>
+                <span className="font-black text-red-500">
+                  {currentResult.falsePositives}
+                </span>
+              </div>
+            )}
+
+          </div>
+
+          <button
+            onClick={continueGame}
+            className="mt-7 w-full bg-violet-600 hover:bg-violet-700 text-white font-black py-5 rounded-2xl shadow-lg active:scale-[0.98] transition-all text-xl"
+          >
+            {roundIndex < 2 ? 'Continue →' : 'Finish Memory Game'}
+          </button>
+
+        </div>
+      )}
+
+      {/* ==================== FINAL RESULT ==================== */}
+      {phase === 'complete' && finalSummary && (
+        <div className="w-full flex flex-col items-center animate-bounce-in">
+
+          <div className="w-28 h-28 rounded-full bg-violet-100 flex items-center justify-center mb-5 shadow-lg">
+            <span className="text-6xl">🧠</span>
+          </div>
+
+          <h2 className="text-3xl md:text-4xl font-black text-violet-800 mb-2">
+            Memory Session Complete!
+          </h2>
+
+          <p className="text-slate-500 font-medium text-center mb-7">
+            Nice work. You completed all three memory challenges.
+          </p>
+
+          <div className="bg-gradient-to-br from-violet-50 to-white p-6 md:p-8 rounded-[2rem] shadow-lg border border-violet-100 w-full">
+
+            <div className="text-center mb-6">
+              <div className="text-sm font-black text-violet-500 uppercase tracking-widest">
+                Overall Memory
+              </div>
+
+              <div className="text-5xl font-black text-violet-800 mt-2">
+                {finalSummary.totalCorrect}
+                <span className="text-2xl text-slate-400">
+                  {' '} / {finalSummary.totalPossible}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+
+              <div className="bg-white rounded-2xl p-4 text-center shadow-sm">
+                <div className="text-3xl font-black text-emerald-600">
+                  {finalSummary.totalCorrect}
+                </div>
+                <div className="text-sm font-bold text-slate-500 mt-1">
+                  Remembered
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 text-center shadow-sm">
+                <div className="text-3xl font-black text-orange-500">
+                  {finalSummary.totalMissed}
+                </div>
+                <div className="text-sm font-bold text-slate-500 mt-1">
+                  Missed
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <button
+            onClick={onBack}
+            className="mt-8 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 px-8 rounded-2xl shadow-lg active:scale-[0.98] transition-all w-full"
+          >
+            Back to Suite
+          </button>
+
+        </div>
+      )}
+
     </PageContainer>
   );
 };
