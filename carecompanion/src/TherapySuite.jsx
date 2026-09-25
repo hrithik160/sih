@@ -628,13 +628,42 @@ const SavingsJar = ({ denomination, items, onDrop, onDragOver }) => (
 
 const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
   const [sessionLevel] = useState(() => Math.min(4, Math.max(1, Number(level) || 1)));
-  const [questions] = useState(() => createMoneyQuestions(sessionLevel));
+  const [questions, setQuestions] = useState(() => createMoneyQuestions(sessionLevel));
   const [questionIndex, setQuestionIndex] = useState(0);
   const [sortedItems, setSortedItems] = useState([]);
   const [currentDenominationIndex, setCurrentDenominationIndex] = useState(0);
   const [errors, setErrors] = useState(0);
   const [won, setWon] = useState(false);
-  const [startTime] = useState(Date.now());
+  const [startTime, setStartTime] = useState(Date.now());
+  const [confirmation, setConfirmation] = useState(null);
+
+  const restartGame = () => {
+    setQuestions(createMoneyQuestions(sessionLevel));
+    setQuestionIndex(0);
+    setSortedItems([]);
+    setCurrentDenominationIndex(0);
+    setErrors(0);
+    setWon(false);
+    setStartTime(Date.now());
+    setConfirmation(null);
+  };
+
+  const gameConfirmation = (
+    <>
+      {confirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="money-confirmation-title">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <h2 id="money-confirmation-title" className="text-2xl font-black text-[#24453f]">{confirmation === 'exit' ? 'Leave this game?' : 'Restart the game?'}</h2>
+            <p className="mt-3 text-lg font-semibold text-[#6d5d4b]">{confirmation === 'exit' ? 'Your current progress will be lost.' : 'Your current round will start again.'}</p>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setConfirmation(null)} className="min-h-14 flex-1 rounded-xl border-2 border-[#cfae8b] bg-white px-4 py-3 text-lg font-black text-[#754831]">{confirmation === 'exit' ? 'Stay' : 'Cancel'}</button>
+              <button onClick={confirmation === 'exit' ? onBack : restartGame} className="min-h-14 flex-1 rounded-xl bg-[#2d8065] px-4 py-3 text-lg font-black text-white shadow-md">{confirmation === 'exit' ? 'Exit' : 'Restart'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   const question = questions[questionIndex];
   const isSorting = sessionLevel === 1 || sessionLevel === 2;
@@ -731,8 +760,16 @@ const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
                 <p className="mb-1 text-sm font-black uppercase tracking-[.2em] text-[#a16e4c]">Level {sessionLevel}</p>
                 <h2 className="text-3xl font-black tracking-tight text-[#24453f]">{sessionLevel === 1 ? 'Money Sorting' : 'Money Sorting Harder'}</h2>
               </div>
-              <div className="rounded-full border border-[#e7d3b7] bg-white/75 px-4 py-2 text-sm font-bold text-[#755c48]">Sort the matching money</div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game">
+                  <span aria-hidden="true">✕</span><span>Exit Game</span>
+                </button>
+                <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-[#cfae8b] bg-white px-5 py-3 text-lg font-black text-[#754831] shadow-sm transition hover:bg-[#fff4df]" aria-label="Restart">
+                  <RotateCcw className="h-6 w-6" /><span>Restart</span>
+                </button>
+              </div>
             </div>
+            {gameConfirmation}
             <div className="grid items-stretch gap-5 lg:grid-cols-[minmax(280px,.9fr)_minmax(360px,1.1fr)]">
               <section className="rounded-[2rem] border border-[#ead8bf] bg-[#fffaf2] p-4 shadow-[0_14px_34px_rgba(91,69,40,.12)] sm:p-6">
                 <div className="mb-2 flex items-center justify-between">
@@ -767,10 +804,21 @@ const MoneyMatchGame = ({ onBack, level, processTelemetry }) => {
     <PageContainer title="Money Match" level={sessionLevel}>
       <div className="-m-6 min-h-full w-[calc(100%+3rem)] bg-[#f8f1e7] p-4 sm:p-6">
         <div className="mx-auto max-w-5xl">
-          <div className="mb-6">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+            <div>
             <p className="mb-1 text-sm font-black uppercase tracking-[.2em] text-[#a16e4c]">Level {sessionLevel}</p>
             <h2 className="text-3xl font-black tracking-tight text-[#24453f]">{sessionLevel === 3 ? 'What Can I Buy?' : 'Count the Money'}</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game">
+                <span aria-hidden="true">✕</span><span>Exit Game</span>
+              </button>
+              <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-[#cfae8b] bg-white px-5 py-3 text-lg font-black text-[#754831] shadow-sm transition hover:bg-[#fff4df]" aria-label="Restart">
+                <RotateCcw className="h-6 w-6" /><span>Restart</span>
+              </button>
+            </div>
           </div>
+          {gameConfirmation}
       {sessionLevel === 3 ? (
         <div className="grid items-stretch gap-5 lg:grid-cols-[.75fr_1.25fr]">
           <section className="flex min-h-[310px] flex-col justify-center rounded-[2rem] border border-[#ead8bf] bg-[#fffaf2] p-6 text-center shadow-[0_14px_34px_rgba(91,69,40,.12)]">
@@ -910,11 +958,42 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
   const [currentResult, setCurrentResult] = useState(null);
   const [roundResults, setRoundResults] = useState([]);
   const [finalSummary, setFinalSummary] = useState(null);
+  const [confirmation, setConfirmation] = useState(null);
+  const [gameResetKey, setGameResetKey] = useState(0);
 
   const [sessionStartTime, setSessionStartTime] = useState(Date.now());
   const usedItemsRef = React.useRef([]);
 
   const config = LEVEL_CONFIG[sessionLevel] || LEVEL_CONFIG[1];
+
+  const restartGame = () => {
+    setRoundIndex(0);
+    setRoundResults([]);
+    setCurrentResult(null);
+    setFinalSummary(null);
+    setSelectedItems([]);
+    setSessionStartTime(Date.now());
+    usedItemsRef.current = [];
+    setGameResetKey(key => key + 1);
+    setConfirmation(null);
+  };
+
+  const gameConfirmation = (
+    <>
+      {confirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="memory-confirmation-title">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+            <h2 id="memory-confirmation-title" className="text-2xl font-black text-slate-800">{confirmation === 'exit' ? 'Leave this game?' : 'Restart the game?'}</h2>
+            <p className="mt-3 text-lg font-semibold text-slate-600">{confirmation === 'exit' ? 'Your current progress will be lost.' : 'Your current round will start again.'}</p>
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setConfirmation(null)} className="min-h-14 flex-1 rounded-xl border-2 border-slate-200 bg-white px-4 py-3 text-lg font-black text-slate-700">{confirmation === 'exit' ? 'Stay' : 'Cancel'}</button>
+              <button onClick={confirmation === 'exit' ? onBack : restartGame} className="min-h-14 flex-1 rounded-xl bg-violet-600 px-4 py-3 text-lg font-black text-white shadow-md">{confirmation === 'exit' ? 'Exit' : 'Restart'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   // Reset the whole game when the selected level changes
   useEffect(() => {
@@ -982,7 +1061,7 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
       clearInterval(timerId);
       if (transitionId) clearTimeout(transitionId);
     };
-  }, [sessionLevel, roundIndex]);
+  }, [sessionLevel, roundIndex, gameResetKey]);
 
   const toggleSelection = (item) => {
     setSelectedItems(previous => {
@@ -1106,14 +1185,23 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
 
   return (
     <PageContainer title="Memory Tray" level={level}>
+      {gameConfirmation}
 
       {/* ==================== OBSERVE PHASE ==================== */}
       {phase === 'observe' && (
         <div className="w-full animate-fade-in">
 
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-800 px-5 py-2 rounded-full font-black text-sm uppercase tracking-wide mb-3">
-              🧠 {config.name}
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-3">
+              <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-800 px-5 py-2 rounded-full font-black text-sm uppercase tracking-wide">
+                🧠 {config.name}
+              </div>
+              <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game">
+                <span aria-hidden="true">✕</span><span>Exit Game</span>
+              </button>
+              <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-violet-200 bg-white px-5 py-3 text-lg font-black text-violet-800 shadow-sm transition hover:bg-violet-50" aria-label="Restart">
+                <RotateCcw className="h-6 w-6" /><span>Restart</span>
+              </button>
             </div>
 
             <h2 className="text-2xl md:text-3xl font-black text-slate-800">
@@ -1234,6 +1322,10 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
       {/* ==================== OBSERVE TO RECALL TRANSITION ==================== */}
       {phase === 'transition' && (
         <div className="w-full min-h-[430px] flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-500">
+          <div className="mb-6 flex items-center gap-3">
+            <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game"><span aria-hidden="true">✕</span><span>Exit Game</span></button>
+            <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-violet-200 bg-white px-5 py-3 text-lg font-black text-violet-800 shadow-sm transition hover:bg-violet-50" aria-label="Restart"><RotateCcw className="h-6 w-6" /><span>Restart</span></button>
+          </div>
           <div className="w-24 h-24 rounded-full bg-amber-100 flex items-center justify-center shadow-sm mb-6 animate-pulse">
             <Brain className="w-12 h-12 text-amber-600" />
           </div>
@@ -1251,8 +1343,12 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
         <div className="w-full animate-fade-in">
 
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-800 px-5 py-2 rounded-full font-black text-sm uppercase tracking-wide mb-3">
-              🧠 Memory Check
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-3">
+              <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-800 px-5 py-2 rounded-full font-black text-sm uppercase tracking-wide">
+                🧠 Memory Check
+              </div>
+              <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game"><span aria-hidden="true">✕</span><span>Exit Game</span></button>
+              <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-violet-200 bg-white px-5 py-3 text-lg font-black text-violet-800 shadow-sm transition hover:bg-violet-50" aria-label="Restart"><RotateCcw className="h-6 w-6" /><span>Restart</span></button>
             </div>
 
             <h2 className="text-2xl md:text-3xl font-black text-slate-800">
@@ -1335,6 +1431,10 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
       {/* ==================== ROUND RESULT ==================== */}
       {phase === 'result' && currentResult && (
         <div className="w-full flex flex-col items-center animate-bounce-in">
+          <div className="mb-5 flex items-center gap-3">
+            <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game"><span aria-hidden="true">✕</span><span>Exit Game</span></button>
+            <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-violet-200 bg-white px-5 py-3 text-lg font-black text-violet-800 shadow-sm transition hover:bg-violet-50" aria-label="Restart"><RotateCcw className="h-6 w-6" /><span>Restart</span></button>
+          </div>
 
           <div
             className={`
@@ -1435,6 +1535,10 @@ const MemoryTrayGame = ({ onBack, level, processTelemetry }) => {
       {/* ==================== FINAL RESULT ==================== */}
       {phase === 'complete' && finalSummary && (
         <div className="w-full flex flex-col items-center animate-bounce-in">
+          <div className="mb-5 flex items-center gap-3">
+            <button onClick={() => setConfirmation('exit')} className="flex min-h-14 items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-lg font-black text-white shadow-md transition hover:bg-red-700" aria-label="Exit Game"><span aria-hidden="true">✕</span><span>Exit Game</span></button>
+            <button onClick={() => setConfirmation('restart')} className="flex min-h-14 items-center gap-2 rounded-xl border-2 border-violet-200 bg-white px-5 py-3 text-lg font-black text-violet-800 shadow-sm transition hover:bg-violet-50" aria-label="Restart"><RotateCcw className="h-6 w-6" /><span>Restart</span></button>
+          </div>
 
           <div className="w-28 h-28 rounded-full bg-violet-100 flex items-center justify-center mb-5 shadow-lg">
             <span className="text-6xl">🧠</span>
