@@ -178,7 +178,7 @@ export default function PatientDashboard({ onNavigate, currentScreen, gameHistor
             <div className="w-12 h-12 bg-white rounded-2xl border shadow-inner flex items-center justify-center text-2xl border-slate-200">🐕</div>
             <div>
               <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-900">
-                <span className="uppercase">{t('dadus_spark')} ☀️</span>
+                <span className="uppercase">{t('daily_spark')} ☀️</span>
                 <span className="text-slate-400 font-normal">• {currentTimeStr}</span>
               </div>
               <p className="text-xs text-slate-700 font-medium mt-0.5">

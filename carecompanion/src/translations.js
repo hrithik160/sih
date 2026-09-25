@@ -154,6 +154,23 @@ const TRANSLATIONS_EN = {
   resolve: "Resolve",
   resolved: "Resolved",
   active: "Active",
+
+  // --- Pre-Game Check-in ---
+  daily_spark: "DAILY SPARK",
+  checkin_title: "Daily Check-In",
+  checkin_subtitle: "How are you doing today before we start playing?",
+  q_day_title: "How was your day overall?",
+  q_mood_title: "How are you feeling right now?",
+  day_great: "🌟 Great & Peaceful",
+  day_good: "🙂 Good & Normal",
+  day_okay: "😐 Okay / Resting",
+  day_tough: "🙁 Difficult / Tough",
+  mood_happy: "😊 Happy & Calm",
+  mood_energetic: "⚡ Energetic",
+  mood_tired: "😴 Sleepy / Low Energy",
+  mood_anxious: "😟 Anxious / Restless",
+  checkin_mascot_thanks: "Thank you! Let's train your brain with some fun games!",
+  checkin_start_games: "Start Playing Games",
 };
 
 export default TRANSLATIONS_EN;

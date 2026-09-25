@@ -131,7 +131,7 @@ export async function seedInitialData() {
 }
 
 // 4. Helper Function: Save a game score and mark it for AWS Sync
-export async function saveTelemetryLocal(gameId, latency, errors, durationSec, patientEmail) {
+export async function saveTelemetryLocal(gameId, latency, errors, durationSec, patientEmail, moodContext = {}) {
   await db.telemetry_logs.add({
     log_uuid: crypto.randomUUID(),
     game_id: gameId,
@@ -140,6 +140,23 @@ export async function saveTelemetryLocal(gameId, latency, errors, durationSec, p
     error_count: errors,
     duration_sec: durationSec,
     sync_status: 0,
-    patient_email: patientEmail || 'unknown'
+    patient_email: patientEmail || 'unknown',
+    day_rating: moodContext.dayRating || null,
+    mood_rating: moodContext.moodRating || null,
+    effective_level: moodContext.effectiveLevel || 2,
+    mismatch_flag: moodContext.mismatchFlag || false
+  });
+}
+
+// 5. Helper Function: Save daily pre-game mood & day check-in
+export async function saveMoodCheckinLocal(dayRating, moodRating, patientEmail) {
+  await db.behavioral_logs.add({
+    log_id: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    type: 'pre_game_mood_checkin',
+    day_rating: dayRating,
+    mood_rating: moodRating,
+    sync_status: 0,
+    patient_email: patientEmail || 'patient@carecompanion.in'
   });
 }
