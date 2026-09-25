@@ -30,3 +30,5 @@ __pycache__/
 *.db
 *.db.bak
 
+# Specifications
+AASTA_UI_UX_Final_Production_Grade_Spec.md
